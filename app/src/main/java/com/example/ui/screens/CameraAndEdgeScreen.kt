@@ -69,8 +69,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -94,6 +94,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.domain.model.NormalizedQuad
 import com.example.domain.model.ScanFilter
 import com.example.ui.theme.EmeraldSuccess
@@ -116,7 +117,7 @@ fun CameraAndEdgeScreen(
     isActiveTab: Boolean = true,
     showBottomNavClearance: Boolean = false
 ) {
-    val session by viewModel.scanSession.collectAsState()
+    val session by viewModel.scanSession.collectAsStateWithLifecycle()
     val haptics = LocalHaptics.current
 
     BackHandler(enabled = session.isCroppingStage) {
@@ -375,12 +376,20 @@ private fun CameraCaptureView(
                 .background(Color(0xFF0F172A))
         ) {
             if (hasCameraPermission && isActiveTab) {
-                val previewView = remember { PreviewView(context) }
-                LaunchedEffect(previewView, isActiveTab) {
+                val previewView = remember {
+                    PreviewView(context).apply {
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                    }
+                }
+                DisposableEffect(previewView, isActiveTab) {
                     val providerFuture = ProcessCameraProvider.getInstance(context)
+                    val mainExecutor = ContextCompat.getMainExecutor(context)
+                    var boundProvider: ProcessCameraProvider? = null
                     providerFuture.addListener({
                         runCatching {
                             val provider = providerFuture.get()
+                            boundProvider = provider
                             val preview = Preview.Builder().build().also {
                                 it.surfaceProvider = previewView.surfaceProvider
                             }
@@ -392,7 +401,12 @@ private fun CameraCaptureView(
                                 imageCapture
                             )
                         }
-                    }, ContextCompat.getMainExecutor(context))
+                    }, mainExecutor)
+
+                    onDispose {
+                        cameraRef = null
+                        runCatching { boundProvider?.unbindAll() }
+                    }
                 }
 
                 AndroidView(
@@ -411,7 +425,7 @@ private fun CameraCaptureView(
                             }
                         }
                 )
-            } else {
+            } else if (!hasCameraPermission) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()

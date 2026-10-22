@@ -21,8 +21,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallSplit
+import androidx.compose.material.icons.automirrored.filled.MergeType
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.ContactMail
 import androidx.compose.material.icons.filled.Contrast
@@ -32,7 +33,6 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
@@ -193,7 +193,7 @@ fun PdfToolsAndConvertScreen(
                                 ToolActionCard(
                                     title = "Merge",
                                     subtitle = "Combine PDFs",
-                                    icon = Icons.Default.MergeType,
+                                    icon = Icons.AutoMirrored.Filled.MergeType,
                                     testTag = "tool_merge_pdf",
                                     modifier = Modifier.weight(1f),
                                     onClick = { activeDialog = ActivePdfToolDialog.MERGE_PDF }
@@ -203,7 +203,7 @@ fun PdfToolsAndConvertScreen(
                                 ToolActionCard(
                                     title = "Split",
                                     subtitle = "Extract pages",
-                                    icon = Icons.Default.CallSplit,
+                                    icon = Icons.AutoMirrored.Filled.CallSplit,
                                     testTag = "tool_split_pdf",
                                     modifier = Modifier.weight(1f),
                                     onClick = { activeDialog = ActivePdfToolDialog.SPLIT_PDF }

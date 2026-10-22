@@ -70,7 +70,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,7 +84,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.data.local.FolderEntity
 import com.example.data.local.ScannedDocumentEntity
 import com.example.domain.model.AppThemeMode
@@ -116,15 +117,15 @@ fun LibraryScreen(
     val context = LocalContext.current
     val haptics = LocalHaptics.current
     val isDark = LocalIsDarkGlass.current
-    val documents by viewModel.filteredDocuments.collectAsState()
-    val folders by viewModel.folders.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val selectedCategory by viewModel.selectedCategory.collectAsState()
-    val selectedFolderId by viewModel.selectedFolderId.collectAsState()
-    val onlyFavorites by viewModel.onlyFavorites.collectAsState()
-    val sortOption by viewModel.sortOption.collectAsState()
-    val selectedDocIds by viewModel.selectedDocIds.collectAsState()
-    val settings by viewModel.settings.collectAsState()
+    val documents by viewModel.filteredDocuments.collectAsStateWithLifecycle()
+    val folders by viewModel.folders.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val selectedFolderId by viewModel.selectedFolderId.collectAsStateWithLifecycle()
+    val onlyFavorites by viewModel.onlyFavorites.collectAsStateWithLifecycle()
+    val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
+    val selectedDocIds by viewModel.selectedDocIds.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showNewFolderDialog by remember { mutableStateOf(false) }
@@ -646,22 +647,28 @@ private fun DocumentGridCard(
                     .height(140.dp)
                     .background(Color.White)
             ) {
-                val thumbFile = remember(doc.thumbnailPath) { File(doc.thumbnailPath) }
-                if (thumbFile.exists()) {
+                val context = LocalContext.current
+                Icon(
+                    imageVector = Icons.Default.PictureAsPdf,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .align(Alignment.Center)
+                )
+                if (doc.thumbnailPath.isNotBlank()) {
+                    val imageRequest = remember(doc.thumbnailPath) {
+                        ImageRequest.Builder(context)
+                            .data(File(doc.thumbnailPath))
+                            .size(280)
+                            .crossfade(false)
+                            .build()
+                    }
                     AsyncImage(
-                        model = thumbFile,
+                        model = imageRequest,
                         contentDescription = doc.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.PictureAsPdf,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                        modifier = Modifier
-                            .size(44.dp)
-                            .align(Alignment.Center)
                     )
                 }
 
@@ -848,19 +855,25 @@ private fun DocumentListRowCard(
                     .background(Color.White),
                 contentAlignment = Alignment.Center
             ) {
-                val thumbFile = remember(doc.thumbnailPath) { File(doc.thumbnailPath) }
-                if (thumbFile.exists()) {
+                val context = LocalContext.current
+                Icon(
+                    imageVector = Icons.Default.PictureAsPdf,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                if (doc.thumbnailPath.isNotBlank()) {
+                    val imageRequest = remember(doc.thumbnailPath) {
+                        ImageRequest.Builder(context)
+                            .data(File(doc.thumbnailPath))
+                            .size(160)
+                            .crossfade(false)
+                            .build()
+                    }
                     AsyncImage(
-                        model = thumbFile,
+                        model = imageRequest,
                         contentDescription = doc.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.PictureAsPdf,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }

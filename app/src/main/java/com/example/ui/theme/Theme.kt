@@ -51,14 +51,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -73,6 +75,7 @@ import com.example.utils.rememberHapticController
 import kotlin.math.abs
 
 val LocalIsDarkGlass = compositionLocalOf { false }
+val LocalHasRootGlassBackground = compositionLocalOf { false }
 
 private val DarkColorScheme = darkColorScheme(
     primary = LuminousCyan,
@@ -159,126 +162,86 @@ fun DocuScanTheme(
 }
 
 /**
- * Authentic iPhone iOS 18 / visionOS Ambient Mesh Background with soft glowing radial orbs
- * that smoothly animate between Light Glass and Dark Glass modes.
+ * Authentic iPhone iOS 18 / visionOS Ambient Mesh Background with cached GPU shaders
+ * and automatic root deduplication so nested screens never double-draw full-screen gradients.
  */
 @Composable
 fun GlassScreenBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val alreadyHasRootBg = LocalHasRootGlassBackground.current
+    if (alreadyHasRootBg) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            content = content
+        )
+        return
+    }
+
     val isDark = LocalIsDarkGlass.current
 
     val topBg by animateColorAsState(
         targetValue = if (isDark) Color(0xFF040814) else Color(0xFFD6E6FB),
-        animationSpec = tween(320),
+        animationSpec = tween(260),
         label = "glassTopBg"
     )
     val midBg by animateColorAsState(
         targetValue = if (isDark) Color(0xFF0A1428) else Color(0xFFEBF3FD),
-        animationSpec = tween(320),
+        animationSpec = tween(260),
         label = "glassMidBg"
     )
     val bottomBg by animateColorAsState(
         targetValue = if (isDark) Color(0xFF060C1B) else Color(0xFFDCE8F8),
-        animationSpec = tween(320),
+        animationSpec = tween(260),
         label = "glassBottomBg"
     )
 
-    val baseGradient = Brush.verticalGradient(
-        colors = listOf(topBg, midBg, bottomBg)
-    )
+    CompositionLocalProvider(LocalHasRootGlassBackground provides true) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .drawWithCache {
+                    val w = size.width.coerceAtLeast(1f)
+                    val h = size.height.coerceAtLeast(1f)
+                    val baseBrush = Brush.verticalGradient(
+                        colors = listOf(topBg, midBg, bottomBg)
+                    )
+                    val orb1Center = Offset(w * 0.14f, h * 0.11f)
+                    val orb1Radius = w * 0.62f
+                    val orb1Brush = Brush.radialGradient(
+                        colors = listOf(
+                            if (isDark) Color(0xFF0A84FF).copy(alpha = 0.28f) else Color(0xFF60A5FA).copy(alpha = 0.30f),
+                            Color.Transparent
+                        ),
+                        center = orb1Center,
+                        radius = orb1Radius
+                    )
+                    val orb2Center = Offset(w * 0.86f, h * 0.42f)
+                    val orb2Radius = w * 0.56f
+                    val orb2Brush = Brush.radialGradient(
+                        colors = listOf(
+                            if (isDark) Color(0xFF5E5CE6).copy(alpha = 0.22f) else Color(0xFF818CF8).copy(alpha = 0.20f),
+                            Color.Transparent
+                        ),
+                        center = orb2Center,
+                        radius = orb2Radius
+                    )
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(baseGradient)
-            .drawBehind {
-                val w = size.width
-                val h = size.height
-                if (isDark) {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF0A84FF).copy(alpha = 0.32f),
-                                Color.Transparent
-                            ),
-                            center = Offset(w * 0.15f, h * 0.12f),
-                            radius = w * 0.65f
-                        ),
-                        radius = w * 0.65f,
-                        center = Offset(w * 0.15f, h * 0.12f)
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF5E5CE6).copy(alpha = 0.25f),
-                                Color.Transparent
-                            ),
-                            center = Offset(w * 0.88f, h * 0.42f),
-                            radius = w * 0.60f
-                        ),
-                        radius = w * 0.60f,
-                        center = Offset(w * 0.88f, h * 0.42f)
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF5AC8FA).copy(alpha = 0.24f),
-                                Color.Transparent
-                            ),
-                            center = Offset(w * 0.28f, h * 0.88f),
-                            radius = w * 0.65f
-                        ),
-                        radius = w * 0.65f,
-                        center = Offset(w * 0.28f, h * 0.88f)
-                    )
-                } else {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF60A5FA).copy(alpha = 0.34f),
-                                Color.Transparent
-                            ),
-                            center = Offset(w * 0.12f, h * 0.10f),
-                            radius = w * 0.65f
-                        ),
-                        radius = w * 0.65f,
-                        center = Offset(w * 0.12f, h * 0.10f)
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF818CF8).copy(alpha = 0.24f),
-                                Color.Transparent
-                            ),
-                            center = Offset(w * 0.90f, h * 0.38f),
-                            radius = w * 0.60f
-                        ),
-                        radius = w * 0.60f,
-                        center = Offset(w * 0.90f, h * 0.38f)
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF38BDF8).copy(alpha = 0.26f),
-                                Color.Transparent
-                            ),
-                            center = Offset(w * 0.28f, h * 0.88f),
-                            radius = w * 0.65f
-                        ),
-                        radius = w * 0.65f,
-                        center = Offset(w * 0.28f, h * 0.88f)
-                    )
-                }
-            },
-        content = content
-    )
+                    onDrawBehind {
+                        drawRect(brush = baseBrush)
+                        drawCircle(brush = orb1Brush, radius = orb1Radius, center = orb1Center)
+                        drawCircle(brush = orb2Brush, radius = orb2Radius, center = orb2Center)
+                    }
+                },
+            content = content
+        )
+    }
 }
 
 /**
- * Smooth iPhone iOS Frosted Glass Card with diagonal translucent refraction sheen,
- * specular top-left highlight border, and tactile haptic feedback on tap.
+ * Smooth iPhone iOS Frosted Glass Card with cached brushes and single-pass GPU drawing
+ * for zero-jank scrolling in LazyColumn / LazyVerticalGrid.
  */
 @Composable
 fun FrostedGlassCard(
@@ -289,62 +252,65 @@ fun FrostedGlassCard(
 ) {
     val isDark = LocalIsDarkGlass.current
     val haptics = LocalHaptics.current
-    val shape = RoundedCornerShape(cornerRadius)
-
-    val glassFillBrush = if (isDark) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.14f),
-                Color(0xFF1E293B).copy(alpha = 0.50f),
-                Color(0xFF0F172A).copy(alpha = 0.62f)
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.76f),
-                Color.White.copy(alpha = 0.52f),
-                Color(0xFFF0F7FF).copy(alpha = 0.64f)
-            )
-        )
-    }
-
-    val specularBorderBrush = if (isDark) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.36f),
-                Color.White.copy(alpha = 0.10f),
-                Color(0xFF38BDF8).copy(alpha = 0.20f)
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.96f),
-                Color.White.copy(alpha = 0.45f),
-                Color.White.copy(alpha = 0.85f)
-            )
-        )
-    }
-
-    val topGlintColor = if (isDark) {
-        Color.White.copy(alpha = 0.22f)
-    } else {
-        Color.White.copy(alpha = 0.88f)
-    }
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
 
     val cardModifier = modifier
         .clip(shape)
-        .background(brush = glassFillBrush, shape = shape)
-        .border(width = 1.1.dp, brush = specularBorderBrush, shape = shape)
-        .drawWithContent {
-            drawContent()
-            drawLine(
-                color = topGlintColor,
-                start = Offset(cornerRadius.toPx() * 0.6f, 1.dp.toPx()),
-                end = Offset(size.width - cornerRadius.toPx() * 0.6f, 1.dp.toPx()),
-                strokeWidth = 1.1.dp.toPx()
-            )
+        .drawWithCache {
+            val crPx = cornerRadius.toPx()
+            val corner = CornerRadius(crPx, crPx)
+            val strokePx = 1.dp.toPx()
+            val fillBrush = if (isDark) {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.14f),
+                        Color(0xFF1E293B).copy(alpha = 0.50f),
+                        Color(0xFF0F172A).copy(alpha = 0.62f)
+                    )
+                )
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.78f),
+                        Color.White.copy(alpha = 0.56f),
+                        Color(0xFFF0F7FF).copy(alpha = 0.68f)
+                    )
+                )
+            }
+            val borderBrush = if (isDark) {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.34f),
+                        Color.White.copy(alpha = 0.10f),
+                        Color(0xFF38BDF8).copy(alpha = 0.18f)
+                    )
+                )
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.95f),
+                        Color.White.copy(alpha = 0.48f),
+                        Color.White.copy(alpha = 0.85f)
+                    )
+                )
+            }
+            val topGlintColor = if (isDark) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.88f)
+
+            onDrawWithContent {
+                drawRoundRect(brush = fillBrush, cornerRadius = corner)
+                drawRoundRect(
+                    brush = borderBrush,
+                    cornerRadius = corner,
+                    style = Stroke(width = strokePx)
+                )
+                drawContent()
+                drawLine(
+                    color = topGlintColor,
+                    start = Offset(crPx * 0.6f, strokePx),
+                    end = Offset((size.width - crPx * 0.6f).coerceAtLeast(crPx * 0.6f), strokePx),
+                    strokeWidth = strokePx
+                )
+            }
         }
         .then(
             if (onClick != null) {
@@ -363,7 +329,7 @@ fun FrostedGlassCard(
 }
 
 /**
- * Adaptive, strictly aligned iOS Frosted Glass Action Button with built-in tactile haptics.
+ * Adaptive, strictly aligned iOS Frosted Glass Action Button with cached brushes and tactile haptics.
  */
 @Composable
 fun GlassActionButton(
@@ -376,7 +342,7 @@ fun GlassActionButton(
 ) {
     val isDark = LocalIsDarkGlass.current
     val haptics = LocalHaptics.current
-    val shape = RoundedCornerShape(14.dp)
+    val shape = remember { RoundedCornerShape(14.dp) }
 
     if (isPrimary) {
         Button(
@@ -409,43 +375,51 @@ fun GlassActionButton(
             )
         }
     } else {
-        val fillBrush = if (isDark) {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.16f),
-                    Color.White.copy(alpha = 0.08f)
-                )
-            )
-        } else {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.85f),
-                    Color.White.copy(alpha = 0.58f)
-                )
-            )
-        }
-        val borderBrush = if (isDark) {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.35f),
-                    Color.White.copy(alpha = 0.12f)
-                )
-            )
-        } else {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color.White,
-                    Color.White.copy(alpha = 0.55f)
-                )
-            )
-        }
-
         Box(
             modifier = modifier
                 .height(height)
                 .clip(shape)
-                .background(fillBrush, shape)
-                .border(1.dp, borderBrush, shape)
+                .drawWithCache {
+                    val corner = CornerRadius(14.dp.toPx(), 14.dp.toPx())
+                    val fillBrush = if (isDark) {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.16f),
+                                Color.White.copy(alpha = 0.08f)
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.85f),
+                                Color.White.copy(alpha = 0.60f)
+                            )
+                        )
+                    }
+                    val borderBrush = if (isDark) {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.34f),
+                                Color.White.copy(alpha = 0.12f)
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.White,
+                                Color.White.copy(alpha = 0.55f)
+                            )
+                        )
+                    }
+                    onDrawBehind {
+                        drawRoundRect(brush = fillBrush, cornerRadius = corner)
+                        drawRoundRect(
+                            brush = borderBrush,
+                            cornerRadius = corner,
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                    }
+                }
                 .clickable {
                     haptics.click()
                     onClick()
@@ -491,12 +465,12 @@ fun GlassThemeTogglePill(
     val haptics = LocalHaptics.current
     val bg by animateColorAsState(
         targetValue = if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.76f),
-        animationSpec = tween(250),
+        animationSpec = tween(220),
         label = "glassToggleBg"
     )
     val border by animateColorAsState(
         targetValue = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.95f),
-        animationSpec = tween(250),
+        animationSpec = tween(220),
         label = "glassToggleBorder"
     )
 
@@ -540,98 +514,90 @@ data class LiquidGlassNavTab(
 )
 
 /**
- * Seamless iPhone iOS 18 / visionOS Liquid Glass Bottom Navigation Bar.
- * - Blends organically into both Light Mode and Dark Mode with feather-soft bottom ambient diffusion.
- * - Supports continuous swipe-linked liquid capsule indicator (`selectedProgress`) that glides
- *   smoothly as the user swipes left/right between Library, Scan, Tools, and Settings.
- * - Triggers crisp tactile vibration haptics on every tab press.
+ * Ultra-smooth 120fps iPhone iOS 18 / visionOS Liquid Glass Bottom Navigation Bar.
+ * - Reads continuous swipe progress inside `drawWithContent` and `graphicsLayer` (draw phase only)
+ *   so swiping left/right across tabs causes ZERO recompositions!
  */
 @Composable
 fun LiquidGlassBottomBar(
     tabs: List<LiquidGlassNavTab>,
     modifier: Modifier = Modifier,
-    selectedProgress: Float? = null
+    selectedProgress: Float? = null,
+    selectedProgressProvider: (() -> Float)? = null
 ) {
     val isDark = LocalIsDarkGlass.current
     val haptics = LocalHaptics.current
-    val dockShape = RoundedCornerShape(32.dp)
+    val dockShape = remember { RoundedCornerShape(32.dp) }
 
     val activeIndex = tabs.indexOfFirst { it.selected }.coerceAtLeast(0)
-    val targetProgress = (selectedProgress ?: activeIndex.toFloat())
-        .coerceIn(0f, (tabs.size - 1).coerceAtLeast(0).toFloat())
-
-    val smoothProgress by animateFloatAsState(
-        targetValue = targetProgress,
+    val fallbackAnimatedProgress by animateFloatAsState(
+        targetValue = (selectedProgress ?: activeIndex.toFloat())
+            .coerceIn(0f, (tabs.size - 1).coerceAtLeast(0).toFloat()),
         animationSpec = spring(
-            dampingRatio = 0.84f,
-            stiffness = Spring.StiffnessMediumLow
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
         ),
-        label = "liquidPillProgress"
+        label = "liquidPillFallbackProgress"
     )
 
     // Animated translucent glass colors so switching Light <-> Dark mode melts seamlessly
     val glassStart by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF1E293B).copy(alpha = 0.56f) else Color.White.copy(alpha = 0.64f),
-        animationSpec = tween(300),
+        targetValue = if (isDark) Color(0xFF1E293B).copy(alpha = 0.64f) else Color.White.copy(alpha = 0.72f),
+        animationSpec = tween(240),
         label = "dockGlassStart"
     )
     val glassMid by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF0F172A).copy(alpha = 0.64f) else Color(0xFFEFF6FF).copy(alpha = 0.54f),
-        animationSpec = tween(300),
+        targetValue = if (isDark) Color(0xFF0F172A).copy(alpha = 0.72f) else Color(0xFFEFF6FF).copy(alpha = 0.64f),
+        animationSpec = tween(240),
         label = "dockGlassMid"
     )
     val glassEnd by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF172554).copy(alpha = 0.52f) else Color.White.copy(alpha = 0.68f),
-        animationSpec = tween(300),
+        targetValue = if (isDark) Color(0xFF172554).copy(alpha = 0.60f) else Color.White.copy(alpha = 0.75f),
+        animationSpec = tween(240),
         label = "dockGlassEnd"
     )
 
     val borderTop by animateColorAsState(
         targetValue = if (isDark) Color.White.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.94f),
-        animationSpec = tween(300),
+        animationSpec = tween(240),
         label = "dockBorderTop"
     )
     val borderMid by animateColorAsState(
         targetValue = if (isDark) LuminousCyan.copy(alpha = 0.22f) else Color(0xFF93C5FD).copy(alpha = 0.45f),
-        animationSpec = tween(300),
+        animationSpec = tween(240),
         label = "dockBorderMid"
     )
     val borderBottom by animateColorAsState(
         targetValue = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.72f),
-        animationSpec = tween(300),
+        animationSpec = tween(240),
         label = "dockBorderBottom"
     )
 
     val pillFillTop by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF0A84FF).copy(alpha = 0.34f) else Color.White.copy(alpha = 0.88f),
-        animationSpec = tween(250),
+        targetValue = if (isDark) Color(0xFF0A84FF).copy(alpha = 0.34f) else Color.White.copy(alpha = 0.90f),
+        animationSpec = tween(220),
         label = "pillFillTop"
     )
     val pillFillBottom by animateColorAsState(
-        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.18f) else Color(0xFFDBEAFE).copy(alpha = 0.78f),
-        animationSpec = tween(250),
+        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.18f) else Color(0xFFDBEAFE).copy(alpha = 0.80f),
+        animationSpec = tween(220),
         label = "pillFillBottom"
     )
     val pillStrokeColor by animateColorAsState(
         targetValue = if (isDark) LuminousCyan.copy(alpha = 0.58f) else RoyalBlue.copy(alpha = 0.28f),
-        animationSpec = tween(250),
+        animationSpec = tween(220),
         label = "pillStroke"
     )
 
     val ambientScrimColor by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF050A16).copy(alpha = 0.52f) else Color(0xFFDCE8F8).copy(alpha = 0.55f),
-        animationSpec = tween(300),
+        targetValue = if (isDark) Color(0xFF050A16).copy(alpha = 0.50f) else Color(0xFFDCE8F8).copy(alpha = 0.52f),
+        animationSpec = tween(240),
         label = "ambientScrim"
     )
 
-    val topGlintColor = if (isDark) {
-        Color.White.copy(alpha = 0.28f)
-    } else {
-        Color.White.copy(alpha = 0.95f)
-    }
+    val topGlintColor = if (isDark) Color.White.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.95f)
+    val maxTabIndex = (tabs.size - 1).coerceAtLeast(0).toFloat()
 
-    // Outer container with soft bottom ambient diffusion veil so the floating glass dock
-    // melts organically into both Light and Dark mode backgrounds without any seam.
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -655,78 +621,77 @@ fun LiquidGlassBottomBar(
                 .widthIn(max = 500.dp)
                 .fillMaxWidth()
                 .clip(dockShape)
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(glassStart, glassMid, glassEnd)
-                    ),
-                    shape = dockShape
-                )
-                .border(
-                    width = 1.15.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(borderTop, borderMid, borderBottom)
-                    ),
-                    shape = dockShape
-                )
-                .drawWithContent {
+                .drawWithCache {
+                    val dockCorner = CornerRadius(32.dp.toPx(), 32.dp.toPx())
+                    val dockBgBrush = Brush.linearGradient(listOf(glassStart, glassMid, glassEnd))
+                    val dockBorderBrush = Brush.linearGradient(listOf(borderTop, borderMid, borderBottom))
+                    val borderStrokePx = 1.15.dp.toPx()
                     val tabCount = tabs.size.coerceAtLeast(1)
                     val horizontalPad = 6.dp.toPx()
                     val verticalPad = 5.dp.toPx()
                     val availableWidth = (size.width - horizontalPad * 2f).coerceAtLeast(1f)
                     val slotWidth = availableWidth / tabCount
-                    val pillLeft = horizontalPad + smoothProgress * slotWidth
                     val pillHeight = (size.height - verticalPad * 2f).coerceAtLeast(1f)
                     val pillCorner = CornerRadius(26.dp.toPx(), 26.dp.toPx())
-
-                    // Continuous sliding Liquid Glass Active Pill
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(pillFillTop, pillFillBottom),
-                            startY = verticalPad,
-                            endY = verticalPad + pillHeight
-                        ),
-                        topLeft = Offset(pillLeft, verticalPad),
-                        size = Size(slotWidth, pillHeight),
-                        cornerRadius = pillCorner
+                    val pillFillBrush = Brush.verticalGradient(
+                        colors = listOf(pillFillTop, pillFillBottom),
+                        startY = verticalPad,
+                        endY = verticalPad + pillHeight
                     )
-                    drawRoundRect(
-                        color = pillStrokeColor,
-                        topLeft = Offset(pillLeft, verticalPad),
-                        size = Size(slotWidth, pillHeight),
-                        cornerRadius = pillCorner,
-                        style = Stroke(width = 1.dp.toPx())
-                    )
+                    val pillStrokePx = 1.dp.toPx()
+                    val glintStartX = 28.dp.toPx()
+                    val glintEndX = (size.width - 28.dp.toPx()).coerceAtLeast(glintStartX)
+                    val glintY = 1.1.dp.toPx()
+                    val glintStrokePx = 1.25.dp.toPx()
 
-                    drawContent()
+                    onDrawWithContent {
+                        // Draw dock glass surface & border
+                        drawRoundRect(brush = dockBgBrush, cornerRadius = dockCorner)
+                        drawRoundRect(
+                            brush = dockBorderBrush,
+                            cornerRadius = dockCorner,
+                            style = Stroke(width = borderStrokePx)
+                        )
 
-                    // Specular top-edge liquid light refraction highlight
-                    drawLine(
-                        color = topGlintColor,
-                        start = Offset(28.dp.toPx(), 1.1.dp.toPx()),
-                        end = Offset(size.width - 28.dp.toPx(), 1.1.dp.toPx()),
-                        strokeWidth = 1.25.dp.toPx()
-                    )
+                        // Read continuous progress in draw phase only (zero recomposition!)
+                        val currentProgress = (selectedProgressProvider?.invoke() ?: fallbackAnimatedProgress)
+                            .coerceIn(0f, maxTabIndex)
+                        val pillLeft = horizontalPad + currentProgress * slotWidth
+
+                        // Continuous sliding Liquid Glass Active Pill
+                        drawRoundRect(
+                            brush = pillFillBrush,
+                            topLeft = Offset(pillLeft, verticalPad),
+                            size = Size(slotWidth, pillHeight),
+                            cornerRadius = pillCorner
+                        )
+                        drawRoundRect(
+                            color = pillStrokeColor,
+                            topLeft = Offset(pillLeft, verticalPad),
+                            size = Size(slotWidth, pillHeight),
+                            cornerRadius = pillCorner,
+                            style = Stroke(width = pillStrokePx)
+                        )
+
+                        drawContent()
+
+                        // Specular top-edge liquid light refraction highlight
+                        drawLine(
+                            color = topGlintColor,
+                            start = Offset(glintStartX, glintY),
+                            end = Offset(glintEndX, glintY),
+                            strokeWidth = glintStrokePx
+                        )
+                    }
                 }
                 .padding(horizontal = 6.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             tabs.forEachIndexed { index, tab ->
-                val distance = abs(smoothProgress - index.toFloat()).coerceIn(0f, 1f)
-                val selectionFraction = 1f - distance
-
-                val contentTint by animateColorAsState(
-                    targetValue = when {
-                        selectionFraction > 0.5f && isDark -> LuminousCyan
-                        selectionFraction > 0.5f && !isDark -> RoyalBlue
-                        isDark -> Color(0xFF94A3B8)
-                        else -> Color(0xFF475569)
-                    },
-                    animationSpec = tween(180),
-                    label = "navContentTint_$index"
-                )
-
-                val iconScale = 1f + (0.10f * selectionFraction)
+                val activeColor = if (isDark) LuminousCyan else RoyalBlue
+                val inactiveColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF475569)
+                val tintColor = if (tab.selected) activeColor else inactiveColor
                 val interactionSource = remember { MutableInteractionSource() }
 
                 Box(
@@ -746,22 +711,29 @@ fun LiquidGlassBottomBar(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
+                        modifier = Modifier.graphicsLayer {
+                            val currentProgress = (selectedProgressProvider?.invoke() ?: fallbackAnimatedProgress)
+                                .coerceIn(0f, maxTabIndex)
+                            val distance = abs(currentProgress - index.toFloat()).coerceIn(0f, 1f)
+                            val selectionFraction = 1f - distance
+                            val scale = 1f + (0.08f * selectionFraction)
+                            scaleX = scale
+                            scaleY = scale
+                        },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Icon(
                             imageVector = tab.icon,
                             contentDescription = tab.label,
-                            tint = contentTint,
-                            modifier = Modifier
-                                .size(21.dp)
-                                .scale(iconScale)
+                            tint = tintColor,
+                            modifier = Modifier.size(21.dp)
                         )
                         Text(
                             text = tab.label,
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (selectionFraction > 0.5f) FontWeight.Bold else FontWeight.Medium,
-                            color = contentTint,
+                            fontWeight = if (tab.selected) FontWeight.Bold else FontWeight.Medium,
+                            color = tintColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -771,3 +743,4 @@ fun LiquidGlassBottomBar(
         }
     }
 }
+

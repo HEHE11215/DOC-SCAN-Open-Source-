@@ -208,7 +208,7 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                 page = targetPage,
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow
+                    stiffness = Spring.StiffnessMedium
                 )
             )
         }
@@ -241,17 +241,12 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
     val showBottomBar = isOnMainPager &&
         !(pagerState.currentPage == 1 && scanSession.isCroppingStage)
 
+    val isLibraryDestination = currentDestination?.hasRoute<LibraryRoute>() == true
     val activeTabIndex = when {
         currentDestination?.hasRoute<CameraScanRoute>() == true -> 1
         currentDestination?.hasRoute<PdfToolsRoute>() == true -> 2
         currentDestination?.hasRoute<SettingsRoute>() == true -> 3
         else -> pagerState.currentPage
-    }
-
-    val continuousTabProgress = if (currentDestination?.hasRoute<LibraryRoute>() == true) {
-        (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 3f)
-    } else {
-        activeTabIndex.toFloat()
     }
 
     // Root full-bleed GlassScreenBackground so content and floating glass nav bar blend 100% seamlessly
@@ -273,7 +268,8 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                         state = pagerState,
                         // Disable horizontal page swipe while dragging 4-corner perspective crop handles
                         userScrollEnabled = !(pagerState.currentPage == 1 && scanSession.isCroppingStage),
-                        beyondViewportPageCount = 1,
+                        beyondViewportPageCount = 0,
+                        key = { it },
                         modifier = Modifier.fillMaxSize()
                     ) { page ->
                         when (page) {
@@ -295,7 +291,7 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
 
                             1 -> CameraAndEdgeScreen(
                                 viewModel = viewModel,
-                                isActiveTab = pagerState.currentPage == 1 || pagerState.targetPage == 1,
+                                isActiveTab = pagerState.settledPage == 1,
                                 showBottomNavClearance = !scanSession.isCroppingStage,
                                 onBack = {
                                     switchToPagerTab(0)
@@ -470,7 +466,13 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 LiquidGlassBottomBar(
-                    selectedProgress = continuousTabProgress,
+                    selectedProgressProvider = {
+                        if (isLibraryDestination) {
+                            (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 3f)
+                        } else {
+                            activeTabIndex.toFloat()
+                        }
+                    },
                     tabs = listOf(
                         LiquidGlassNavTab(
                             label = "Library",
