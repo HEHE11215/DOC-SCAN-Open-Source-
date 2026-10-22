@@ -280,8 +280,9 @@ object ImageProcessor {
 
     /**
      * Applies selected ScanFilter plus custom brightness (-80f..80f) and contrast (0.6f..1.8f) adjustments.
-     * Note: ScanFilter.BW always outputs strictly binary pure black (#000000) and pure white (#FFFFFF) pixels
-     * and never turns grey when adjusting brightness or contrast.
+     * - ScanFilter.CLEAR: Built-in Document Clear mode (default on first capture/upload) that bleaches paper
+     *   background to pure white (#FFFFFF) while preserving smooth anti-aliased black/charcoal ink and fine detail.
+     * - ScanFilter.BW: Strictly binary pure black (#000000) and pure white (#FFFFFF) pixels (never grey).
      */
     suspend fun applyEnhancement(
         source: Bitmap,
@@ -291,6 +292,14 @@ object ImageProcessor {
         rotationDegrees: Int = 0
     ): Bitmap = withContext(Dispatchers.Default) {
         val rotated = if (rotationDegrees != 0) rotateBitmap(source, rotationDegrees) else source
+
+        if (filter == ScanFilter.CLEAR) {
+            return@withContext applyDocumentClearScan(
+                source = rotated,
+                brightness = brightness,
+                contrast = contrast
+            )
+        }
 
         if (filter == ScanFilter.BW) {
             return@withContext applyAdaptiveBlackAndWhite(
@@ -305,7 +314,7 @@ object ImageProcessor {
             ScanFilter.AUTO -> applyColorMatrixFilter(rotated, saturation = 1.08f, contrast = 1.25f, brightness = 10f)
             ScanFilter.MAGIC_COLOR -> applyColorMatrixFilter(rotated, saturation = 1.45f, contrast = 1.42f, brightness = 16f)
             ScanFilter.GRAYSCALE -> applyColorMatrixFilter(rotated, saturation = 0f, contrast = 1.18f, brightness = 6f)
-            ScanFilter.BW -> rotated
+            ScanFilter.CLEAR, ScanFilter.BW -> rotated
             ScanFilter.NO_SHADOW -> applyShadowRemoval(rotated)
         }
 
@@ -314,6 +323,109 @@ object ImageProcessor {
         } else {
             filtered
         }
+    }
+
+    /**
+     * Built-in Document Clear Scan ("Clear" mode):
+     * Normalizes local paper illumination across a smoothed grid, bleaches paper background to pure white (#FFFFFF),
+     * and applies a smooth S-curve to render crisp, anti-aliased black & white document text without harsh 1-bit jagged edges.
+     */
+    private fun applyDocumentClearScan(
+        source: Bitmap,
+        brightness: Float = 0f,
+        contrast: Float = 1f
+    ): Bitmap {
+        val w = source.width
+        val h = source.height
+        val pixels = IntArray(w * h)
+        source.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        val blockSize = max(18, min(w, h) / 22)
+        val gridW = (w + blockSize - 1) / blockSize
+        val gridH = (h + blockSize - 1) / blockSize
+        val rawBg = IntArray(gridW * gridH)
+
+        // 1. Estimate local paper background illumination per block
+        for (gy in 0 until gridH) {
+            val yStart = gy * blockSize
+            val yEnd = min(h, yStart + blockSize)
+            for (gx in 0 until gridW) {
+                val xStart = gx * blockSize
+                val xEnd = min(w, xStart + blockSize)
+                var maxL = 110
+                var sumBright = 0
+                var countBright = 0
+                for (y in yStart until yEnd step 2) {
+                    val rowOffset = y * w
+                    for (x in xStart until xEnd step 2) {
+                        val c = pixels[rowOffset + x]
+                        val l = (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
+                        if (l > maxL) maxL = l
+                        if (l > 125) {
+                            sumBright += l
+                            countBright++
+                        }
+                    }
+                }
+                val avgBright = if (countBright > 0) sumBright / countBright else maxL
+                rawBg[gy * gridW + gx] = ((maxL * 3 + avgBright * 2) / 5).coerceIn(95, 255)
+            }
+        }
+
+        // 2. Smooth the background illumination grid (3x3 box filter) to avoid block boundaries
+        val smoothBg = IntArray(gridW * gridH)
+        for (gy in 0 until gridH) {
+            for (gx in 0 until gridW) {
+                var sum = 0
+                var count = 0
+                for (dy in -1..1) {
+                    val ny = (gy + dy).coerceIn(0, gridH - 1)
+                    for (dx in -1..1) {
+                        val nx = (gx + dx).coerceIn(0, gridW - 1)
+                        sum += rawBg[ny * gridW + nx]
+                        count++
+                    }
+                }
+                smoothBg[gy * gridW + gx] = sum / count
+            }
+        }
+
+        // 3. Smooth S-curve white/black cutoffs controlled by Brightness & Contrast sliders
+        val brightnessShift = (brightness * 0.45f).toInt()
+        val contrastSpan = (68f / contrast.coerceIn(0.6f, 1.8f)).toInt()
+        val centerLevel = (152 - brightnessShift).coerceIn(85, 215)
+        val blackPoint = (centerLevel - contrastSpan).coerceIn(30, 175)
+        val whitePoint = (centerLevel + contrastSpan).coerceIn(blackPoint + 24, 245)
+        val range = (whitePoint - blackPoint).coerceAtLeast(1)
+
+        for (y in 0 until h) {
+            val gy = min(gridH - 1, y / blockSize)
+            val rowOffset = y * w
+            for (x in 0 until w) {
+                val gx = min(gridW - 1, x / blockSize)
+                val bg = smoothBg[gy * gridW + gx]
+                val c = pixels[rowOffset + x]
+                val l = (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
+
+                // Normalize pixel reflectance relative to local paper background
+                val norm = (l * 255) / bg
+                val v = when {
+                    norm <= blackPoint -> 0
+                    norm >= whitePoint -> 255
+                    else -> {
+                        // Smooth cubic Hermite (smoothstep) for crisp anti-aliased text edges
+                        val t = (norm - blackPoint).toFloat() / range.toFloat()
+                        val s = t * t * (3f - 2f * t)
+                        (s * 255f).toInt().coerceIn(0, 255)
+                    }
+                }
+                pixels[rowOffset + x] = (0xFF shl 24) or (v shl 16) or (v shl 8) or v
+            }
+        }
+
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        out.setPixels(pixels, 0, w, 0, 0, w, h)
+        return out
     }
 
     private fun applyColorMatrixFilter(
@@ -574,4 +686,69 @@ object ImageProcessor {
         canvas.drawText("Authorized Signature: A. Vance, VP Finance", 70f, 900f, subPaint)
         return bmp
     }
+
+    /**
+     * Composites a signature bitmap onto a document page bitmap at normalized placement coordinates.
+     * @param normX 0f (left) to 1f (right) within available width
+     * @param normY 0f (top) to 1f (bottom) within available height
+     * @param scale Signature width as a fraction of page width (e.g., 0.28f)
+     */
+    fun imposeSignatureOnBitmap(
+        pageBitmap: Bitmap,
+        signatureBitmap: Bitmap,
+        normX: Float = 0.65f,
+        normY: Float = 0.80f,
+        scale: Float = 0.30f
+    ): Bitmap {
+        val out = pageBitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(out)
+        val pageW = out.width.toFloat()
+        val pageH = out.height.toFloat()
+
+        val clampedScale = scale.coerceIn(0.12f, 0.65f)
+        val sigW = pageW * clampedScale
+        val sigRatio = signatureBitmap.height.toFloat() / signatureBitmap.width.coerceAtLeast(1)
+        val sigH = sigW * sigRatio
+
+        val maxLeft = (pageW - sigW - 8f).coerceAtLeast(8f)
+        val maxTop = (pageH - sigH - 8f).coerceAtLeast(8f)
+        val sx = (normX.coerceIn(0f, 1f) * maxLeft).coerceIn(8f, maxLeft)
+        val sy = (normY.coerceIn(0f, 1f) * maxTop).coerceIn(8f, maxTop)
+
+        val destRect = RectF(sx, sy, sx + sigW, sy + sigH)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(signatureBitmap, null, destRect, paint)
+        return out
+    }
+
+    /**
+     * Converts near-white backgrounds in an imported signature image to transparent
+     * so imported signatures stamp cleanly onto document pages.
+     */
+    fun makeSignatureTransparentIfWhite(source: Bitmap): Bitmap {
+        val w = source.width
+        val h = source.height
+        val pixels = IntArray(w * h)
+        source.getPixels(pixels, 0, w, 0, 0, w, h)
+        for (i in pixels.indices) {
+            val c = pixels[i]
+            val a = (c ushr 24) and 0xFF
+            if (a > 0) {
+                val r = (c shr 16) and 0xFF
+                val g = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                val lum = (r * 77 + g * 150 + b * 29) shr 8
+                if (lum > 220) {
+                    pixels[i] = 0x00000000
+                } else if (lum > 185) {
+                    val newAlpha = ((220 - lum) * 255 / 35).coerceIn(0, 255)
+                    pixels[i] = (newAlpha shl 24) or (r shl 16) or (g shl 8) or b
+                }
+            }
+        }
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        out.setPixels(pixels, 0, w, 0, 0, w, h)
+        return out
+    }
 }
+

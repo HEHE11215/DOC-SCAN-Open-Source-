@@ -491,11 +491,25 @@ fun PdfToolsAndConvertScreen(
     }
 
     if (showSignatureForTarget && currentTarget != null) {
+        var previewBmp by remember(currentTarget.thumbnailPath) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        androidx.compose.runtime.LaunchedEffect(currentTarget.thumbnailPath) {
+            previewBmp = com.example.utils.ImageProcessor.loadBitmapFromPath(currentTarget.thumbnailPath)
+        }
         SignaturePadDialog(
             onDismiss = { showSignatureForTarget = false },
-            onSignatureCaptured = { bmp ->
+            pagePreviewBitmap = previewBmp,
+            pageCount = currentTarget.pageCount.coerceAtLeast(1),
+            onSignatureImposed = { bmp, pageIdx, normX, normY, scale ->
                 showSignatureForTarget = false
-                viewModel.applySignatureToDocument(currentTarget.id, bmp, pageIndex = -1)
+                viewModel.applySignatureToDocument(
+                    docId = currentTarget.id,
+                    signatureBitmap = bmp,
+                    pageIndex = pageIdx,
+                    normX = normX,
+                    normY = normY,
+                    scale = scale
+                )
+                onOpenDocument(currentTarget.id)
             }
         )
     }

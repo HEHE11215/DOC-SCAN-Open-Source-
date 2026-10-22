@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Straighten
@@ -117,6 +118,7 @@ fun EnhanceAndOcrScreen(
     var activeTab by remember { mutableIntStateOf(0) } // 0 = Enhance Filters, 1 = OCR & Text Layer
     var showAdjustSliders by remember { mutableStateOf(false) }
     var showSavePdfDialog by remember { mutableStateOf(false) }
+    var showSignatureDialog by remember { mutableStateOf(false) }
     var showScriptMenu by remember { mutableStateOf(false) }
     var highlightedBlockText by remember { mutableStateOf<String?>(null) }
 
@@ -156,6 +158,7 @@ fun EnhanceAndOcrScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .padding(bottom = 6.dp)
         ) {
             // Top Frosted Glass Header
             FrostedGlassCard(
@@ -246,9 +249,9 @@ fun EnhanceAndOcrScreen(
             // Main Image Canvas with Interactive OCR Bounding Box Highlights
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(if (activeTab == 0) 1f else 0.40f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color.White)
                     .border(1.dp, Color.White, RoundedCornerShape(20.dp)),
@@ -318,7 +321,7 @@ fun EnhanceAndOcrScreen(
                         val isSelected = idx == session.activePageIndex
                         Box(
                             modifier = Modifier
-                                .size(54.dp, 68.dp)
+                                .size(50.dp, 64.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .border(
                                     width = if (isSelected) 2.5.dp else 1.dp,
@@ -362,10 +365,12 @@ fun EnhanceAndOcrScreen(
                     onDeskew = {
                         viewModel.applyFilterAndAdjustmentsToActivePage(autoDeskew = true)
                     },
+                    onOpenSignDialog = { showSignatureDialog = true },
                     onDeletePage = { viewModel.deleteActiveDraftPage() }
                 )
             } else {
                 OcrControlsPanel(
+                    modifier = Modifier.weight(0.60f),
                     selectedScript = session.selectedOcrScript,
                     ocrText = activePage.ocrText,
                     highlightedBlock = highlightedBlockText,
@@ -414,6 +419,28 @@ fun EnhanceAndOcrScreen(
         }
     }
 
+    if (showSignatureDialog) {
+        SignaturePadDialog(
+            onDismiss = { showSignatureDialog = false },
+            pagePreviewBitmap = activePage.enhancedBitmap,
+            pageCount = session.pages.size.coerceAtLeast(1),
+            initialPageIndex = session.activePageIndex,
+            onSignatureImposed = { sigBmp, targetPageIdx, normX, normY, scale ->
+                showSignatureDialog = false
+                if (targetPageIdx >= 0 && targetPageIdx != session.activePageIndex) {
+                    viewModel.selectActiveDraftPage(targetPageIdx)
+                }
+                viewModel.imposeSignatureOnActiveDraftPage(
+                    signatureBitmap = sigBmp,
+                    normX = normX,
+                    normY = normY,
+                    scale = scale,
+                    applyToAllPages = (targetPageIdx == -1)
+                )
+            }
+        )
+    }
+
     if (showSavePdfDialog) {
         SavePdfOptionsDialog(
             defaultPageSize = settings.defaultPageSize,
@@ -452,19 +479,21 @@ private fun EnhanceControlsPanel(
     onBrightnessContrastChange: (Float, Float) -> Unit,
     onRotate90: () -> Unit,
     onDeskew: () -> Unit,
+    onOpenSignDialog: () -> Unit,
     onDeletePage: () -> Unit
 ) {
     FrostedGlassCard(
         cornerRadius = 24.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val orderedFilters = listOf(
+                ScanFilter.CLEAR,
                 ScanFilter.BW,
                 ScanFilter.AUTO,
                 ScanFilter.MAGIC_COLOR,
@@ -537,10 +566,10 @@ private fun EnhanceControlsPanel(
                 }
             }
 
-            // 4 Equal-Width Aligned Action Buttons
+            // Aligned Action Buttons (Crop, Rotate, Sign, Tune, Delete)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 GlassActionButton(
@@ -560,11 +589,13 @@ private fun EnhanceControlsPanel(
                     modifier = Modifier.weight(1f)
                 )
                 GlassActionButton(
-                    text = "Deskew",
-                    icon = Icons.Default.Straighten,
+                    text = "Sign",
+                    icon = androidx.compose.material.icons.Icons.Default.Edit,
                     height = 40.dp,
-                    onClick = onDeskew,
-                    modifier = Modifier.weight(1f)
+                    onClick = onOpenSignDialog,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("enhance_sign_page_button")
                 )
                 GlassActionButton(
                     text = "Tune",
@@ -576,7 +607,7 @@ private fun EnhanceControlsPanel(
                 if (canDeletePage) {
                     IconButton(
                         onClick = onDeletePage,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
                         Icon(
                             Icons.Default.Delete,
@@ -592,6 +623,7 @@ private fun EnhanceControlsPanel(
 
 @Composable
 private fun OcrControlsPanel(
+    modifier: Modifier = Modifier,
     selectedScript: OcrScript,
     ocrText: String,
     highlightedBlock: String?,
@@ -607,16 +639,17 @@ private fun OcrControlsPanel(
 ) {
     FrostedGlassCard(
         cornerRadius = 24.dp,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Top Row: Script selector + Scan OCR + All Pages with comfortable spacing
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -625,7 +658,7 @@ private fun OcrControlsPanel(
                 Box(modifier = Modifier.weight(1f)) {
                     GlassActionButton(
                         text = selectedScript.label.substringBefore(" ("),
-                        height = 40.dp,
+                        height = 42.dp,
                         onClick = onToggleScriptMenu,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -644,17 +677,18 @@ private fun OcrControlsPanel(
 
                 GlassActionButton(
                     text = "Scan OCR",
+                    icon = Icons.Default.TextFields,
                     isPrimary = true,
-                    height = 40.dp,
+                    height = 42.dp,
                     onClick = onRunOcrPage,
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.15f)
                         .testTag("run_ocr_button")
                 )
 
                 GlassActionButton(
                     text = "All Pages",
-                    height = 40.dp,
+                    height = 42.dp,
                     onClick = onRunOcrAllPages,
                     modifier = Modifier.weight(1f)
                 )
@@ -664,43 +698,49 @@ private fun OcrControlsPanel(
                 Text(
                     text = "Copied: \"$highlightedBlock\"",
                     style = MaterialTheme.typography.labelSmall,
-                    color = ElectricTeal
+                    color = ElectricTeal,
+                    maxLines = 1
                 )
             }
 
             OutlinedTextField(
                 value = ocrText,
                 onValueChange = onOcrTextEdited,
-                label = { Text("OCR Text") },
-                minLines = 3,
-                maxLines = 4,
+                label = { Text("Recognized OCR Text") },
+                placeholder = { Text("Tap 'Scan OCR' above to extract text from this page...") },
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
                     .testTag("ocr_editable_text_field")
             )
 
+            // Bottom Row: Equal-width Copy, Share, Export TXT buttons with clean margins
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 GlassActionButton(
                     text = "Copy",
                     icon = Icons.Default.ContentCopy,
-                    height = 38.dp,
+                    height = 42.dp,
                     onClick = onCopyText,
                     modifier = Modifier.weight(1f)
                 )
                 GlassActionButton(
                     text = "Share",
                     icon = Icons.Default.Share,
-                    height = 38.dp,
+                    height = 42.dp,
                     onClick = onShareText,
                     modifier = Modifier.weight(1f)
                 )
                 GlassActionButton(
-                    text = "TXT",
+                    text = "Export TXT",
                     icon = Icons.Default.Download,
-                    height = 38.dp,
+                    height = 42.dp,
                     onClick = onExportTxt,
                     modifier = Modifier.weight(1f)
                 )

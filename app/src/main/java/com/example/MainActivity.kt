@@ -203,63 +203,59 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
         containerColor = Color.Transparent,
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(
-                    containerColor = if (isDark) {
-                        Color(0xFF0B1528).copy(alpha = 0.84f)
-                    } else {
-                        Color.White.copy(alpha = 0.80f)
-                    },
-                    tonalElevation = 0.dp
-                ) {
-                    NavigationBarItem(
-                        selected = currentDestination?.hasRoute<LibraryRoute>() == true,
-                        onClick = {
-                            navController.navigate(LibraryRoute) {
-                                popUpTo(LibraryRoute) { inclusive = false }
-                                launchSingleTop = true
+                com.example.ui.theme.LiquidGlassBottomBar(
+                    modifier = Modifier.padding(bottom = 6.dp),
+                    tabs = listOf(
+                        com.example.ui.theme.LiquidGlassNavTab(
+                            label = "Library",
+                            icon = Icons.Default.Folder,
+                            selected = currentDestination?.hasRoute<LibraryRoute>() == true,
+                            testTag = "nav_tab_library",
+                            onClick = {
+                                navController.navigate(LibraryRoute) {
+                                    popUpTo(LibraryRoute) { inclusive = false }
+                                    launchSingleTop = true
+                                }
                             }
-                        },
-                        icon = { Icon(Icons.Default.Folder, contentDescription = "Library") },
-                        label = { Text("Library") },
-                        modifier = Modifier.testTag("nav_tab_library")
-                    )
-                    NavigationBarItem(
-                        selected = currentDestination?.hasRoute<CameraScanRoute>() == true,
-                        onClick = {
-                            viewModel.startNewScanSession(ScannerCaptureMode.STANDARD_BATCH)
-                            navController.navigate(CameraScanRoute) {
-                                launchSingleTop = true
+                        ),
+                        com.example.ui.theme.LiquidGlassNavTab(
+                            label = "Scan",
+                            icon = Icons.Default.DocumentScanner,
+                            selected = currentDestination?.hasRoute<CameraScanRoute>() == true,
+                            testTag = "nav_tab_scan",
+                            onClick = {
+                                viewModel.startNewScanSession(ScannerCaptureMode.STANDARD_BATCH)
+                                navController.navigate(CameraScanRoute) {
+                                    launchSingleTop = true
+                                }
                             }
-                        },
-                        icon = { Icon(Icons.Default.DocumentScanner, contentDescription = "Scan") },
-                        label = { Text("Scan") },
-                        modifier = Modifier.testTag("nav_tab_scan")
-                    )
-                    NavigationBarItem(
-                        selected = currentDestination?.hasRoute<PdfToolsRoute>() == true,
-                        onClick = {
-                            navController.navigate(PdfToolsRoute) {
-                                popUpTo(LibraryRoute) { inclusive = false }
-                                launchSingleTop = true
+                        ),
+                        com.example.ui.theme.LiquidGlassNavTab(
+                            label = "Tools",
+                            icon = Icons.Default.Build,
+                            selected = currentDestination?.hasRoute<PdfToolsRoute>() == true,
+                            testTag = "nav_tab_pdf_tools",
+                            onClick = {
+                                navController.navigate(PdfToolsRoute) {
+                                    popUpTo(LibraryRoute) { inclusive = false }
+                                    launchSingleTop = true
+                                }
                             }
-                        },
-                        icon = { Icon(Icons.Default.Build, contentDescription = "Tools") },
-                        label = { Text("Tools") },
-                        modifier = Modifier.testTag("nav_tab_pdf_tools")
-                    )
-                    NavigationBarItem(
-                        selected = currentDestination?.hasRoute<SettingsRoute>() == true,
-                        onClick = {
-                            navController.navigate(SettingsRoute) {
-                                popUpTo(LibraryRoute) { inclusive = false }
-                                launchSingleTop = true
+                        ),
+                        com.example.ui.theme.LiquidGlassNavTab(
+                            label = "Settings",
+                            icon = Icons.Default.Settings,
+                            selected = currentDestination?.hasRoute<SettingsRoute>() == true,
+                            testTag = "nav_tab_settings",
+                            onClick = {
+                                navController.navigate(SettingsRoute) {
+                                    popUpTo(LibraryRoute) { inclusive = false }
+                                    launchSingleTop = true
+                                }
                             }
-                        },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings") },
-                        modifier = Modifier.testTag("nav_tab_settings")
+                        )
                     )
-                }
+                )
             }
         }
     ) { innerPadding ->

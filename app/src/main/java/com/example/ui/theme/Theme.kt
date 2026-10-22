@@ -10,14 +10,17 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -480,3 +483,165 @@ fun GlassThemeTogglePill(
         }
     }
 }
+
+data class LiquidGlassNavTab(
+    val label: String,
+    val icon: ImageVector,
+    val selected: Boolean,
+    val testTag: String,
+    val onClick: () -> Unit
+)
+
+/**
+ * Floating iPhone iOS Liquid Glass Bottom Navigation Dock.
+ * Features translucent frosted acrylic gradient, specular 1.2dp refraction border,
+ * top edge highlight glint, and animated glowing pill capsules for the active tab.
+ */
+@Composable
+fun LiquidGlassBottomBar(
+    tabs: List<LiquidGlassNavTab>,
+    modifier: Modifier = Modifier
+) {
+    val isDark = LocalIsDarkGlass.current
+    val dockShape = RoundedCornerShape(28.dp)
+
+    val dockFillBrush = if (isDark) {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF1E293B).copy(alpha = 0.78f),
+                Color(0xFF0F172A).copy(alpha = 0.88f),
+                Color(0xFF091224).copy(alpha = 0.92f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.86f),
+                Color(0xFFF0F7FF).copy(alpha = 0.78f),
+                Color.White.copy(alpha = 0.88f)
+            )
+        )
+    }
+
+    val dockBorderBrush = if (isDark) {
+        Brush.linearGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.42f),
+                Color(0xFF38BDF8).copy(alpha = 0.25f),
+                Color.White.copy(alpha = 0.14f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                Color.White,
+                Color(0xFFBAE6FD).copy(alpha = 0.75f),
+                Color.White.copy(alpha = 0.92f)
+            )
+        )
+    }
+
+    val topGlintColor = if (isDark) {
+        Color.White.copy(alpha = 0.30f)
+    } else {
+        Color.White.copy(alpha = 0.96f)
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(dockShape)
+                .background(brush = dockFillBrush, shape = dockShape)
+                .border(width = 1.25.dp, brush = dockBorderBrush, shape = dockShape)
+                .drawWithContent {
+                    drawContent()
+                    drawLine(
+                        color = topGlintColor,
+                        start = Offset(24.dp.toPx(), 1.2.dp.toPx()),
+                        end = Offset(size.width - 24.dp.toPx(), 1.2.dp.toPx()),
+                        strokeWidth = 1.4.dp.toPx()
+                    )
+                }
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tabs.forEach { tab ->
+                val pillBg by animateColorAsState(
+                    targetValue = when {
+                        tab.selected && isDark -> Color(0xFF0A84FF).copy(alpha = 0.28f)
+                        tab.selected && !isDark -> RoyalBlue.copy(alpha = 0.14f)
+                        else -> Color.Transparent
+                    },
+                    animationSpec = tween(220),
+                    label = "navPillBg"
+                )
+                val pillBorder by animateColorAsState(
+                    targetValue = when {
+                        tab.selected && isDark -> LuminousCyan.copy(alpha = 0.55f)
+                        tab.selected && !isDark -> RoyalBlue.copy(alpha = 0.35f)
+                        else -> Color.Transparent
+                    },
+                    animationSpec = tween(220),
+                    label = "navPillBorder"
+                )
+                val contentTint by animateColorAsState(
+                    targetValue = when {
+                        tab.selected && isDark -> LuminousCyan
+                        tab.selected && !isDark -> RoyalBlue
+                        isDark -> Color(0xFF94A3B8)
+                        else -> Color(0xFF475569)
+                    },
+                    animationSpec = tween(220),
+                    label = "navContentTint"
+                )
+
+                val itemShape = RoundedCornerShape(20.dp)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(itemShape)
+                        .background(pillBg, itemShape)
+                        .border(1.dp, pillBorder, itemShape)
+                        .clickable(onClick = tab.onClick)
+                        .padding(vertical = 7.dp, horizontal = 4.dp)
+                        .then(Modifier),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier.testTag(tab.testTag),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = contentTint,
+                                modifier = Modifier.size(21.dp)
+                            )
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (tab.selected) FontWeight.Bold else FontWeight.Medium,
+                                color = contentTint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

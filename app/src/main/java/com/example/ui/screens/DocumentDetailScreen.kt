@@ -13,6 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -35,6 +37,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.RotateRight
@@ -68,6 +71,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -85,9 +89,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
@@ -109,8 +116,11 @@ import com.example.domain.model.PageNumberFormat
 import com.example.domain.model.PageNumberPosition
 import com.example.domain.model.PdfQuality
 import com.example.domain.model.ScanFilter
+import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.FrostedGlassCard
+import com.example.ui.theme.GlassActionButton
 import com.example.ui.theme.GlassScreenBackground
+import com.example.ui.theme.LuminousCyan
 import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.utils.ImageProcessor
 import com.example.utils.OcrAndBarcodeEngine
@@ -353,6 +363,32 @@ fun DocumentDetailScreen(
                         doc = currentDoc,
                         editableText = editableOcrText,
                         onTextChange = { editableOcrText = it },
+                        onRunOcrAllPages = {
+                            scope.launch {
+                                val settings = viewModel.settings.value
+                                val sb = StringBuilder()
+                                pages.forEachIndexed { idx, pageEntity ->
+                                    val bmp = ImageProcessor.loadBitmapFromPath(pageEntity.processedImagePath)
+                                    if (bmp != null) {
+                                        val res = OcrAndBarcodeEngine.recognizeText(bmp, settings.defaultOcrScript)
+                                        viewModel.documentRepository.updatePageOcr(
+                                            docId = currentDoc.id,
+                                            page = pageEntity,
+                                            ocrText = res.fullText,
+                                            blocksJson = OcrAndBarcodeEngine.encodeBlocksToJson(res.blocks)
+                                        )
+                                        if (res.fullText.isNotBlank()) {
+                                            if (sb.isNotEmpty()) sb.append("\n\n")
+                                            sb.append("--- Page ${idx + 1} ---\n").append(res.fullText.trim())
+                                        }
+                                    }
+                                }
+                                if (sb.isNotEmpty()) {
+                                    editableOcrText = sb.toString()
+                                }
+                                viewModel.showStatus("Completed OCR across ${pages.size} page(s)")
+                            }
+                        },
                         onSaveText = {
                             scope.launch {
                                 viewModel.documentRepository.updateDocumentMetadata(
@@ -399,14 +435,23 @@ fun DocumentDetailScreen(
     }
 
     if (showSignatureDialog) {
+        var firstPageBmp by remember { mutableStateOf<Bitmap?>(null) }
+        LaunchedEffect(pages) {
+            firstPageBmp = pages.firstOrNull()?.let { ImageProcessor.loadBitmapFromPath(it.processedImagePath) }
+        }
         SignaturePadDialog(
             onDismiss = { showSignatureDialog = false },
-            onSignatureCaptured = { signatureBmp ->
+            pagePreviewBitmap = firstPageBmp,
+            pageCount = pages.size.coerceAtLeast(1),
+            onSignatureImposed = { signatureBmp, targetPageIdx, normX, normY, scale ->
                 showSignatureDialog = false
                 viewModel.applySignatureToDocument(
                     docId = currentDoc.id,
                     signatureBitmap = signatureBmp,
-                    pageIndex = -1
+                    pageIndex = targetPageIdx,
+                    normX = normX,
+                    normY = normY,
+                    scale = scale
                 )
             }
         )
@@ -467,7 +512,7 @@ private fun PdfPagesViewerTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Horizontal Action Strip with 1-tap Convert to B&W, Sign, Watermark, Compress, Password
+        // Horizontal Action Strip with 1-tap Clear Scan, Convert to B&W, Sign, Watermark, Compress, Password
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -475,6 +520,12 @@ private fun PdfPagesViewerTab(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            AssistChip(
+                onClick = { viewModel.convertDocumentFilter(doc.id, ScanFilter.CLEAR) },
+                label = { Text("Clear Scan") },
+                leadingIcon = { Icon(Icons.Default.Contrast, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.testTag("doc_convert_clear_button")
+            )
             AssistChip(
                 onClick = { viewModel.convertDocumentFilter(doc.id, ScanFilter.BW) },
                 label = { Text("Convert to B&W") },
@@ -663,6 +714,7 @@ private fun OcrTextDetailTab(
     doc: com.example.data.local.ScannedDocumentEntity,
     editableText: String,
     onTextChange: (String) -> Unit,
+    onRunOcrAllPages: () -> Unit,
     onSaveText: () -> Unit,
     onCopyText: () -> Unit,
     onShareTxt: () -> Unit,
@@ -671,67 +723,96 @@ private fun OcrTextDetailTab(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        FrostedGlassCard(
+            cornerRadius = 20.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            FilledTonalButton(
-                onClick = onCopyText,
+            Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("ocr_copy_button")
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Copy")
-            }
-            FilledTonalButton(
-                onClick = onShareTxt,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("ocr_share_txt_button")
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Share .TXT")
-            }
-            FilledTonalButton(
-                onClick = onSaveTxtSaf,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("ocr_export_txt_button")
-            ) {
-                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Export")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlassActionButton(
+                        text = "Scan OCR",
+                        icon = Icons.Default.TextFields,
+                        isPrimary = true,
+                        height = 40.dp,
+                        onClick = onRunOcrAllPages,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("ocr_detail_run_button")
+                    )
+                    GlassActionButton(
+                        text = "Copy",
+                        icon = Icons.Default.ContentCopy,
+                        height = 40.dp,
+                        onClick = onCopyText,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("ocr_copy_button")
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlassActionButton(
+                        text = "Share TXT",
+                        icon = Icons.Default.Share,
+                        height = 40.dp,
+                        onClick = onShareTxt,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("ocr_share_txt_button")
+                    )
+                    GlassActionButton(
+                        text = "Export",
+                        icon = Icons.Default.Download,
+                        height = 40.dp,
+                        onClick = onSaveTxtSaf,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("ocr_export_txt_button")
+                    )
+                }
             }
         }
 
         OutlinedTextField(
             value = editableText,
             onValueChange = onTextChange,
-            label = { Text("Searchable OCR Text Layer (${doc.title})") },
-            placeholder = { Text("No OCR text extracted yet. Tap the OCR icon on any page to extract text.") },
+            label = { Text("OCR Text (${doc.title})") },
+            placeholder = { Text("No OCR text extracted yet. Tap 'Scan OCR' above to extract text from all pages.") },
             textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .testTag("ocr_detail_text_input")
         )
 
-        Button(
+        GlassActionButton(
+            text = "Save Edited OCR Text",
+            icon = Icons.Default.Save,
+            isPrimary = true,
+            height = 46.dp,
             onClick = onSaveText,
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(bottom = 4.dp)
                 .testTag("ocr_save_changes_button")
-        ) {
-            Icon(Icons.Default.Save, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Save Edited OCR Text")
-        }
+        )
     }
 }
 
@@ -811,79 +892,142 @@ fun WatermarkAndNumberingDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SignaturePadDialog(
     onDismiss: () -> Unit,
-    onSignatureCaptured: (Bitmap) -> Unit
+    pagePreviewBitmap: Bitmap? = null,
+    pageCount: Int = 1,
+    initialPageIndex: Int = -1,
+    onSignatureImposed: ((signatureBitmap: Bitmap, targetPageIndex: Int, normX: Float, normY: Float, scale: Float) -> Unit)? = null,
+    onSignatureCaptured: (Bitmap) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val strokes = remember { mutableStateListOf<List<Offset>>() }
-    var currentStroke by remember { mutableStateOf<List<Offset>>(emptyList()) }
+    // Normalized strokes (x and y in 0f..1f relative to the signature pad box)
+    val normStrokes = remember { mutableStateListOf<List<Offset>>() }
+    var currentNormStroke by remember { mutableStateOf<List<Offset>>(emptyList()) }
+    var importedSignatureBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var selectedInkColor by remember { mutableIntStateOf(AndroidColor.rgb(15, 36, 96)) }
+
+    // Interactive Imposition Coordinates on the Document Page (0f..1f)
+    var sigNormX by remember { mutableFloatStateOf(0.62f) }
+    var sigNormY by remember { mutableFloatStateOf(0.78f) }
+    var sigScale by remember { mutableFloatStateOf(0.32f) }
+    var targetPageIndex by remember { mutableIntStateOf(initialPageIndex) }
 
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val bmp = ImageProcessor.loadBitmapFromUri(context, uri, maxDim = 800)
+                val bmp = ImageProcessor.loadBitmapFromUri(context, uri, maxDim = 900)
                 if (bmp != null) {
-                    onSignatureCaptured(bmp)
+                    importedSignatureBitmap = ImageProcessor.makeSignatureTransparentIfWhite(bmp)
+                    normStrokes.clear()
+                    currentNormStroke = emptyList()
                 }
             }
         }
     }
 
+    val hasSignature = normStrokes.isNotEmpty() || importedSignatureBitmap != null
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Signature (Draw or Import)") },
+        title = {
+            Text(
+                text = "Sign & Impose on Page",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(
-                    text = "Draw your signature below or import a signature image.",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "1. Draw your signature or import an image:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .height(130.dp)
+                        .clip(RoundedCornerShape(14.dp))
                         .background(Color.White)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
                         .pointerInput(Unit) {
                             detectDragGestures(
                                 onDragStart = { offset ->
-                                    currentStroke = listOf(offset)
+                                    importedSignatureBitmap = null
+                                    val w = size.width.toFloat().coerceAtLeast(1f)
+                                    val h = size.height.toFloat().coerceAtLeast(1f)
+                                    currentNormStroke = listOf(
+                                        Offset(
+                                            (offset.x / w).coerceIn(0f, 1f),
+                                            (offset.y / h).coerceIn(0f, 1f)
+                                        )
+                                    )
                                 },
                                 onDrag = { change, _ ->
                                     change.consume()
-                                    currentStroke = currentStroke + change.position
+                                    val w = size.width.toFloat().coerceAtLeast(1f)
+                                    val h = size.height.toFloat().coerceAtLeast(1f)
+                                    currentNormStroke = currentNormStroke + Offset(
+                                        (change.position.x / w).coerceIn(0f, 1f),
+                                        (change.position.y / h).coerceIn(0f, 1f)
+                                    )
                                 },
                                 onDragEnd = {
-                                    if (currentStroke.size > 1) {
-                                        strokes.add(currentStroke)
+                                    if (currentNormStroke.size > 1) {
+                                        normStrokes.add(currentNormStroke)
                                     }
-                                    currentStroke = emptyList()
+                                    currentNormStroke = emptyList()
                                 }
                             )
                         }
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val allStrokes = strokes + listOf(currentStroke)
-                        for (pts in allStrokes) {
-                            if (pts.size > 1) {
-                                val path = Path().apply {
-                                    moveTo(pts.first().x, pts.first().y)
-                                    for (i in 1 until pts.size) {
-                                        lineTo(pts[i].x, pts[i].y)
+                    val importedBmp = importedSignatureBitmap
+                    if (importedBmp != null) {
+                        Image(
+                            bitmap = importedBmp.asImageBitmap(),
+                            contentDescription = "Imported Signature",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(10.dp)
+                        )
+                    } else {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val w = size.width
+                            val h = size.height
+                            // Subtle signature baseline guide
+                            drawLine(
+                                color = Color(0xFFCBD5E1),
+                                start = Offset(w * 0.08f, h * 0.78f),
+                                end = Offset(w * 0.92f, h * 0.78f),
+                                strokeWidth = 2f
+                            )
+                            val allStrokes = normStrokes + listOf(currentNormStroke)
+                            for (pts in allStrokes) {
+                                if (pts.size > 1) {
+                                    val path = Path().apply {
+                                        moveTo(pts.first().x * w, pts.first().y * h)
+                                        for (i in 1 until pts.size) {
+                                            lineTo(pts[i].x * w, pts[i].y * h)
+                                        }
                                     }
+                                    drawPath(
+                                        path = path,
+                                        color = Color(selectedInkColor),
+                                        style = Stroke(width = 6.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    )
                                 }
-                                drawPath(
-                                    path = path,
-                                    color = Color(selectedInkColor),
-                                    style = Stroke(width = 6f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                                )
                             }
                         }
                     }
@@ -898,13 +1042,14 @@ fun SignaturePadDialog(
                         listOf(
                             AndroidColor.rgb(15, 36, 96) to "Navy",
                             AndroidColor.BLACK to "Black",
+                            AndroidColor.rgb(10, 102, 204) to "Blue",
                             AndroidColor.rgb(180, 24, 24) to "Red"
                         ).forEach { (col, _) ->
                             Surface(
                                 shape = CircleShape,
                                 color = Color(col),
                                 modifier = Modifier
-                                    .size(28.dp)
+                                    .size(26.dp)
                                     .border(
                                         width = if (selectedInkColor == col) 2.5.dp else 0.dp,
                                         color = MaterialTheme.colorScheme.primary,
@@ -914,11 +1059,14 @@ fun SignaturePadDialog(
                             ) {}
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            strokes.clear()
-                            currentStroke = emptyList()
-                        }) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(
+                            onClick = {
+                                normStrokes.clear()
+                                currentNormStroke = emptyList()
+                                importedSignatureBitmap = null
+                            }
+                        ) {
                             Text("Clear")
                         }
                         OutlinedButton(
@@ -926,9 +1074,211 @@ fun SignaturePadDialog(
                                 imagePicker.launch(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                 )
-                            }
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text("Import")
+                        }
+                    }
+                }
+
+                // Step 2: Interactive Page Imposition Preview
+                Text(
+                    text = "2. Where to Impose Signature (Drag on Page):",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                // Quick Position Presets
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        Triple("Bottom Right", 0.62f, 0.78f),
+                        Triple("Bottom Left", 0.08f, 0.78f),
+                        Triple("Bottom Center", 0.35f, 0.78f),
+                        Triple("Center", 0.35f, 0.45f),
+                        Triple("Top Right", 0.62f, 0.12f)
+                    ).forEach { (label, px, py) ->
+                        val isPresetSelected = kotlin.math.abs(sigNormX - px) < 0.06f && kotlin.math.abs(sigNormY - py) < 0.06f
+                        FilterChip(
+                            selected = isPresetSelected,
+                            onClick = {
+                                sigNormX = px
+                                sigNormY = py
+                            },
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                // Interactive Page Preview Canvas where user drags where the signature is imposed
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(175.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFE2E8F0))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                        .pointerInput(sigScale) {
+                            detectTapGestures { tap ->
+                                val w = size.width.toFloat().coerceAtLeast(1f)
+                                val h = size.height.toFloat().coerceAtLeast(1f)
+                                val boxW = w * sigScale
+                                val boxH = boxW * 0.4f
+                                val maxL = (w - boxW).coerceAtLeast(1f)
+                                val maxT = (h - boxH).coerceAtLeast(1f)
+                                sigNormX = ((tap.x - boxW / 2f) / maxL).coerceIn(0f, 1f)
+                                sigNormY = ((tap.y - boxH / 2f) / maxT).coerceIn(0f, 1f)
+                            }
+                        }
+                        .pointerInput(sigScale) {
+                            detectDragGestures { change, _ ->
+                                change.consume()
+                                val w = size.width.toFloat().coerceAtLeast(1f)
+                                val h = size.height.toFloat().coerceAtLeast(1f)
+                                val boxW = w * sigScale
+                                val boxH = boxW * 0.4f
+                                val maxL = (w - boxW).coerceAtLeast(1f)
+                                val maxT = (h - boxH).coerceAtLeast(1f)
+                                sigNormX = ((change.position.x - boxW / 2f) / maxL).coerceIn(0f, 1f)
+                                sigNormY = ((change.position.y - boxH / 2f) / maxT).coerceIn(0f, 1f)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (pagePreviewBitmap != null) {
+                        Image(
+                            bitmap = pagePreviewBitmap.asImageBitmap(),
+                            contentDescription = "Document Page Imposition Preview",
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(6.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White)
+                        )
+                    } else {
+                        // Clean simulated document sheet lines when no bitmap is provided
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(6.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White)
+                        ) {
+                            val pw = size.width
+                            val ph = size.height
+                            for (lineIdx in 1..6) {
+                                val ly = ph * (0.12f * lineIdx)
+                                drawLine(
+                                    color = Color(0xFFE2E8F0),
+                                    start = Offset(pw * 0.1f, ly),
+                                    end = Offset(pw * (if (lineIdx == 6) 0.55f else 0.9f), ly),
+                                    strokeWidth = 4f
+                                )
+                            }
+                        }
+                    }
+
+                    // Live Signature Imposition Overlay Box
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(6.dp)
+                    ) {
+                        val w = size.width
+                        val h = size.height
+                        val boxW = w * sigScale
+                        val boxH = boxW * 0.40f
+                        val maxL = (w - boxW).coerceAtLeast(1f)
+                        val maxT = (h - boxH).coerceAtLeast(1f)
+                        val left = sigNormX.coerceIn(0f, 1f) * maxL
+                        val top = sigNormY.coerceIn(0f, 1f) * maxT
+
+                        drawRoundRect(
+                            color = LuminousCyan.copy(alpha = 0.22f),
+                            topLeft = Offset(left, top),
+                            size = Size(boxW, boxH),
+                            cornerRadius = CornerRadius(8f, 8f)
+                        )
+                        drawRoundRect(
+                            color = ElectricTeal,
+                            topLeft = Offset(left, top),
+                            size = Size(boxW, boxH),
+                            cornerRadius = CornerRadius(8f, 8f),
+                            style = Stroke(
+                                width = 3f,
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
+                            )
+                        )
+
+                        // Render live drawn strokes inside the target imposition box!
+                        val allStrokes = normStrokes + listOf(currentNormStroke)
+                        for (pts in allStrokes) {
+                            if (pts.size > 1) {
+                                val path = Path().apply {
+                                    moveTo(left + pts.first().x * boxW, top + pts.first().y * boxH)
+                                    for (i in 1 until pts.size) {
+                                        lineTo(left + pts[i].x * boxW, top + pts[i].y * boxH)
+                                    }
+                                }
+                                drawPath(
+                                    path = path,
+                                    color = Color(selectedInkColor),
+                                    style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Signature Size Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Size: ${(sigScale * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.width(68.dp)
+                    )
+                    Slider(
+                        value = sigScale,
+                        onValueChange = { sigScale = it },
+                        valueRange = 0.18f..0.52f,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Target Page Selector if document has multiple pages
+                if (pageCount > 1) {
+                    Text(
+                        text = "Apply to Page:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = targetPageIndex == -1,
+                            onClick = { targetPageIndex = -1 },
+                            label = { Text("All Pages") }
+                        )
+                        for (idx in 0 until pageCount) {
+                            FilterChip(
+                                selected = targetPageIndex == idx,
+                                onClick = { targetPageIndex = idx },
+                                label = { Text("Page ${idx + 1}") }
+                            )
                         }
                     }
                 }
@@ -937,25 +1287,41 @@ fun SignaturePadDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val bmp = Bitmap.createBitmap(600, 240, Bitmap.Config.ARGB_8888)
-                    val canvas = AndroidCanvas(bmp)
-                    val paint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-                        color = selectedInkColor
-                        style = AndroidPaint.Style.STROKE
-                        strokeWidth = 7f
-                        strokeCap = AndroidPaint.Cap.ROUND
-                        strokeJoin = AndroidPaint.Join.ROUND
-                    }
-                    for (pts in strokes) {
-                        for (i in 0 until pts.size - 1) {
-                            canvas.drawLine(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, paint)
+                    val finalBmp = importedSignatureBitmap ?: run {
+                        val outW = 800
+                        val outH = 320
+                        val bmp = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+                        val canvas = AndroidCanvas(bmp)
+                        val paint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                            color = selectedInkColor
+                            style = AndroidPaint.Style.STROKE
+                            strokeWidth = 9f
+                            strokeCap = AndroidPaint.Cap.ROUND
+                            strokeJoin = AndroidPaint.Join.ROUND
                         }
+                        for (pts in normStrokes) {
+                            for (i in 0 until pts.size - 1) {
+                                canvas.drawLine(
+                                    pts[i].x * outW,
+                                    pts[i].y * outH,
+                                    pts[i + 1].x * outW,
+                                    pts[i + 1].y * outH,
+                                    paint
+                                )
+                            }
+                        }
+                        bmp
                     }
-                    onSignatureCaptured(bmp)
+                    if (onSignatureImposed != null) {
+                        onSignatureImposed(finalBmp, targetPageIndex, sigNormX, sigNormY, sigScale)
+                    } else {
+                        onSignatureCaptured(finalBmp)
+                    }
                 },
-                enabled = strokes.isNotEmpty()
+                enabled = hasSignature,
+                modifier = Modifier.testTag("confirm_impose_signature_button")
             ) {
-                Text("Stamp Signature")
+                Text("Impose Signature")
             }
         },
         dismissButton = {

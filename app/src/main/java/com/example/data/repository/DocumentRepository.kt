@@ -31,7 +31,7 @@ data class DraftScannedPage(
     val originalBitmap: Bitmap,
     val croppedBitmap: Bitmap,
     val enhancedBitmap: Bitmap,
-    val filter: ScanFilter = ScanFilter.BW,
+    val filter: ScanFilter = ScanFilter.CLEAR,
     val brightness: Float = 0f,
     val contrast: Float = 1f,
     val rotationDegrees: Int = 0,
@@ -98,7 +98,7 @@ class DocumentRepository(
                 originalBitmap = sampleBmp,
                 croppedBitmap = sampleBmp,
                 enhancedBitmap = sampleBmp,
-                filter = ScanFilter.BW,
+                filter = ScanFilter.CLEAR,
                 ocrText = sampleOcr,
                 ocrBlocks = sampleBlocks
             )
@@ -280,16 +280,40 @@ class DocumentRepository(
         pageNumberFormat: PageNumberFormat? = null,
         pageNumberPosition: PageNumberPosition = PageNumberPosition.BOTTOM_RIGHT,
         signatureBitmap: Bitmap? = null,
-        signaturePageIndex: Int = -1
+        signaturePageIndex: Int = -1,
+        signatureNormX: Float = 0.65f,
+        signatureNormY: Float = 0.80f,
+        signatureScale: Float = 0.30f
     ): ScannedDocumentEntity? = withContext(Dispatchers.IO) {
         val doc = documentDao.getDocumentById(docId) ?: return@withContext null
-        val pages = documentDao.getPagesForDocument(docId).sortedBy { it.pageIndex }
+        val pages = documentDao.getPagesForDocument(docId).sortedBy { it.pageIndex }.toMutableList()
         if (pages.isEmpty()) return@withContext doc
 
-        val inputs = pages.mapNotNull { pageEntity ->
-            val bmp = ImageProcessor.loadBitmapFromPath(pageEntity.processedImagePath) ?: return@mapNotNull null
+        val inputs = pages.mapIndexedNotNull { idx, pageEntity ->
+            val rawBmp = ImageProcessor.loadBitmapFromPath(pageEntity.processedImagePath) ?: return@mapIndexedNotNull null
+            val finalBmp = if (signatureBitmap != null && (signaturePageIndex == -1 || signaturePageIndex == idx)) {
+                val signedBmp = ImageProcessor.imposeSignatureOnBitmap(
+                    pageBitmap = rawBmp,
+                    signatureBitmap = signatureBitmap,
+                    normX = signatureNormX,
+                    normY = signatureNormY,
+                    scale = signatureScale
+                )
+                val newFile = ImageProcessor.saveBitmapToInternalFile(
+                    context = context,
+                    bitmap = signedBmp,
+                    prefix = "signed_${docId}_p${idx}",
+                    quality = 92
+                )
+                val updatedEntity = pageEntity.copy(processedImagePath = newFile.absolutePath)
+                documentDao.upsertPage(updatedEntity)
+                pages[idx] = updatedEntity
+                signedBmp
+            } else {
+                rawBmp
+            }
             PdfPageInput(
-                bitmap = bmp,
+                bitmap = finalBmp,
                 ocrBlocks = OcrAndBarcodeEngine.decodeBlocksFromJson(pageEntity.ocrBlocksJson),
                 fullOcrText = pageEntity.ocrText
             )
@@ -309,8 +333,8 @@ class DocumentRepository(
             watermarkText = targetWatermark,
             pageNumberFormat = pageNumberFormat,
             pageNumberPosition = pageNumberPosition,
-            signatureBitmap = signatureBitmap,
-            signaturePageIndex = signaturePageIndex
+            signatureBitmap = null,
+            signaturePageIndex = -1
         )
 
         val combinedOcr = pages.mapIndexedNotNull { idx, p ->

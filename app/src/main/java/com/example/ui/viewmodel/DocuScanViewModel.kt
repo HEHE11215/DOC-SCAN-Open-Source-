@@ -59,7 +59,7 @@ data class ActiveScanSessionState(
     val detectedQuad: NormalizedQuad = NormalizedQuad(),
     val isCroppingStage: Boolean = false,
     val isEditingExistingPageCrop: Boolean = false,
-    val selectedCropFilter: ScanFilter = ScanFilter.BW,
+    val selectedCropFilter: ScanFilter = ScanFilter.CLEAR,
     val idCardFrontBitmap: Bitmap? = null,
     val idCardBackBitmap: Bitmap? = null,
     val businessCardInfo: BusinessCardInfo? = null,
@@ -925,15 +925,65 @@ class DocuScanViewModel(
     fun applySignatureToDocument(
         docId: String,
         signatureBitmap: Bitmap,
-        pageIndex: Int = -1
+        pageIndex: Int = -1,
+        normX: Float = 0.65f,
+        normY: Float = 0.80f,
+        scale: Float = 0.30f
     ) {
         viewModelScope.launch {
             documentRepository.rebuildDocumentPdf(
                 docId = docId,
                 signatureBitmap = signatureBitmap,
-                signaturePageIndex = pageIndex
+                signaturePageIndex = pageIndex,
+                signatureNormX = normX,
+                signatureNormY = normY,
+                signatureScale = scale
             )
-            showStatus("Applied signature to PDF")
+            val targetLabel = if (pageIndex == -1) "all pages" else "Page ${pageIndex + 1}"
+            showStatus("Imposed signature on $targetLabel")
+        }
+    }
+
+    fun imposeSignatureOnActiveDraftPage(
+        signatureBitmap: Bitmap,
+        normX: Float = 0.65f,
+        normY: Float = 0.80f,
+        scale: Float = 0.30f,
+        applyToAllPages: Boolean = false
+    ) {
+        val state = _scanSession.value
+        if (state.pages.isEmpty()) return
+        val targetIdx = state.activePageIndex
+        viewModelScope.launch {
+            val updatedPages = state.pages.mapIndexed { idx, draft ->
+                if (applyToAllPages || idx == targetIdx) {
+                    val signedEnhanced = ImageProcessor.imposeSignatureOnBitmap(
+                        pageBitmap = draft.enhancedBitmap,
+                        signatureBitmap = signatureBitmap,
+                        normX = normX,
+                        normY = normY,
+                        scale = scale
+                    )
+                    val signedCropped = ImageProcessor.imposeSignatureOnBitmap(
+                        pageBitmap = draft.croppedBitmap,
+                        signatureBitmap = signatureBitmap,
+                        normX = normX,
+                        normY = normY,
+                        scale = scale
+                    )
+                    draft.copy(
+                        croppedBitmap = signedCropped,
+                        enhancedBitmap = signedEnhanced
+                    )
+                } else {
+                    draft
+                }
+            }
+            _scanSession.update { it.copy(pages = updatedPages) }
+            showStatus(
+                if (applyToAllPages) "Imposed signature on all ${updatedPages.size} pages"
+                else "Imposed signature on Page ${targetIdx + 1}"
+            )
         }
     }
 
@@ -975,11 +1025,13 @@ class DocuScanViewModel(
             }
             val (_, bitmaps) = imported
             val drafts = bitmaps.map { bmp ->
-                val ocr = OcrAndBarcodeEngine.recognizeText(bmp, settings.value.defaultOcrScript)
+                val clearBmp = ImageProcessor.applyEnhancement(bmp, ScanFilter.CLEAR)
+                val ocr = OcrAndBarcodeEngine.recognizeText(clearBmp, settings.value.defaultOcrScript)
                 DraftScannedPage(
                     originalBitmap = bmp,
                     croppedBitmap = bmp,
-                    enhancedBitmap = bmp,
+                    enhancedBitmap = clearBmp,
+                    filter = ScanFilter.CLEAR,
                     ocrText = ocr.fullText,
                     ocrBlocks = ocr.blocks
                 )

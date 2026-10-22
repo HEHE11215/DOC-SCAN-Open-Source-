@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class ScanFilter(val label: String) {
+    CLEAR("Clear"),
     BW("B&W"),
     AUTO("Auto"),
     MAGIC_COLOR("Magic"),
