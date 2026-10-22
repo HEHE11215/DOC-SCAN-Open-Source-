@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Corner scanner brackets -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M28,36 L28,28 L36,28 L36,31 L31,31 L31,36 Z M72,28 L80,28 L80,36 L77,36 L77,31 L72,31 Z M28,72 L31,72 L31,77 L36,77 L36,80 L28,80 Z M77,72 L80,72 L80,80 L72,80 L72,77 L77,77 Z" />
+    <!-- Document silhouette -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,33 L60,33 L70,43 L70,75 L38,75 Z" />
+    <!-- Document folded corner -->
+    <path
+        android:fillColor="#90CAF9"
+        android:pathData="M60,33 L60,43 L70,43 Z" />
+    <!-- Document text bars -->
+    <path
+        android:fillColor="#1E3E62"
+        android:pathData="M43,49 L65,49 L65,52 L43,52 Z M43,56 L61,56 L61,59 L43,59 Z M43,63 L56,63 L56,66 L43,66 Z" />
+    <!-- Glowing Laser Scan Line -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M25,53 L83,53 L83,56 L25,56 Z" />
+</vector>

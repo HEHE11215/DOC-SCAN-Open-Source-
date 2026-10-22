@@ -1,0 +1,114 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidCloudDocument(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'title', 'category', 'pageCount', 'fileSizeBytes',
+               'ocrText', 'aiSummary', 'isFavorite', 'isPasswordProtected',
+               'pageSize', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'title', 'folderId', 'category', 'pageCount', 'fileSizeBytes',
+               'ocrText', 'aiSummary', 'tags', 'isFavorite', 'isPasswordProtected',
+               'pageSize', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == request.auth.uid && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             (!('folderId' in data) || data.folderId == null || (data.folderId is string && data.folderId.size() <= 128)) &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 64 &&
+             data.pageCount is int && data.pageCount >= 1 && data.pageCount <= 2000 &&
+             data.fileSizeBytes is int && data.fileSizeBytes >= 0 && data.fileSizeBytes <= 1073741824 &&
+             data.ocrText is string && data.ocrText.size() <= 100000 &&
+             data.aiSummary is string && data.aiSummary.size() <= 20000 &&
+             (!('tags' in data) || (
+               data.tags is list &&
+               data.tags.size() <= 10 &&
+               (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 50))
+             )) &&
+             data.isFavorite is bool &&
+             data.isPasswordProtected is bool &&
+             data.pageSize is string && data.pageSize in ['A4', 'LETTER', 'ORIGINAL'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCloudFolder(data, userId) {
+      return data.keys().hasAll(['userId', 'name', 'colorHex', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'name', 'colorHex', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId == request.auth.uid && data.userId == userId &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.colorHex is string && data.colorHex.size() >= 4 && data.colorHex.size() <= 16 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId}/documents/{docId} {
+      allow get: if isOwner(userId) && isValidId(docId) && (resource == null || existing().userId == request.auth.uid);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(docId) &&
+                       isValidCloudDocument(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(docId) &&
+                       isValidCloudDocument(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'title', 'folderId', 'category', 'pageCount', 'fileSizeBytes',
+                         'ocrText', 'aiSummary', 'tags', 'isFavorite', 'isPasswordProtected',
+                         'pageSize', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(docId) && existing().userId == request.auth.uid;
+    }
+
+    match /users/{userId}/folders/{folderId} {
+      allow get: if isOwner(userId) && isValidId(folderId) && (resource == null || existing().userId == request.auth.uid);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(folderId) &&
+                       isValidCloudFolder(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(folderId) &&
+                       isValidCloudFolder(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'colorHex', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(folderId) && existing().userId == request.auth.uid;
+    }
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "entities": {
+    "CloudDocument": {
+      "title": "CloudDocument",
+      "description": "Metadata, OCR text, AI summary, and settings for a scanned PDF document synced to Firestore.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated Google user who owns this document."
+        },
+        "title": {
+          "type": "string",
+          "description": "Display title of the scanned document."
+        },
+        "folderId": {
+          "type": "string",
+          "description": "Optional folder ID or empty string if in root."
+        },
+        "category": {
+          "type": "string",
+          "description": "Document category such as Scan, ID Card, Business Card, Receipt, Contract, or Imported."
+        },
+        "pageCount": {
+          "type": "integer",
+          "description": "Total number of pages in the document."
+        },
+        "fileSizeBytes": {
+          "type": "integer",
+          "description": "File size of the generated PDF in bytes."
+        },
+        "ocrText": {
+          "type": "string",
+          "description": "Combined OCR text extracted from all pages of the document."
+        },
+        "aiSummary": {
+          "type": "string",
+          "description": "AI-generated summary or insights from Gemini."
+        },
+        "tags": {
+          "type": "array",
+          "description": "Up to 10 short string tags classifying the document."
+        },
+        "isFavorite": {
+          "type": "boolean",
+          "description": "Whether the document is starred as a favorite."
+        },
+        "isPasswordProtected": {
+          "type": "boolean",
+          "description": "Whether the PDF has password protection enabled."
+        },
+        "pageSize": {
+          "type": "string",
+          "description": "PDF page size preset (A4, LETTER, ORIGINAL)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the document was created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the document was last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "title",
+        "category",
+        "pageCount",
+        "fileSizeBytes",
+        "ocrText",
+        "aiSummary",
+        "isFavorite",
+        "isPasswordProtected",
+        "pageSize",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CloudFolder": {
+      "title": "CloudFolder",
+      "description": "User-created folder for organizing scanned documents.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated Google user who owns this folder."
+        },
+        "name": {
+          "type": "string",
+          "description": "Folder display name."
+        },
+        "colorHex": {
+          "type": "string",
+          "description": "Hex color accent for the folder badge."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the folder was created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the folder was last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "colorHex",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/documents/{docId}": {
+      "schema": {
+        "$ref": "#/entities/CloudDocument"
+      },
+      "description": "Per-user synced scanned documents containing metadata, OCR text, and AI analysis."
+    },
+    "/users/{userId}/folders/{folderId}": {
+      "schema": {
+        "$ref": "#/entities/CloudFolder"
+      },
+      "description": "Per-user synced folders for organizing documents."
+    }
+  }
+}
