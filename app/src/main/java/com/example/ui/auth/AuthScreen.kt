@@ -284,7 +284,7 @@ fun AuthScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "DocuScan",
+                        text = "Doc Scan",
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.ExtraBold

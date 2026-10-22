@@ -105,22 +105,23 @@ import com.example.ui.theme.RoyalBlue
 import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.ui.viewmodel.ScannerCaptureMode
 import com.example.utils.ImageProcessor
+import com.example.utils.LocalHaptics
 import kotlin.math.hypot
 
 @Composable
 fun CameraAndEdgeScreen(
     viewModel: DocuScanViewModel,
     onBack: () -> Unit,
-    onProceedToEnhance: () -> Unit
+    onProceedToEnhance: () -> Unit,
+    isActiveTab: Boolean = true,
+    showBottomNavClearance: Boolean = false
 ) {
     val session by viewModel.scanSession.collectAsState()
+    val haptics = LocalHaptics.current
 
-    BackHandler {
-        if (session.isCroppingStage) {
-            viewModel.cancelCropStage()
-        } else {
-            onBack()
-        }
+    BackHandler(enabled = session.isCroppingStage) {
+        haptics.tick()
+        viewModel.cancelCropStage()
     }
 
     val context = LocalContext.current
@@ -150,8 +151,8 @@ fun CameraAndEdgeScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission && !session.isCroppingStage) {
+    LaunchedEffect(isActiveTab) {
+        if (isActiveTab && !hasCameraPermission && !session.isCroppingStage) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
@@ -162,14 +163,25 @@ fun CameraAndEdgeScreen(
                 bitmap = session.pendingRawBitmap!!,
                 quad = session.detectedQuad,
                 selectedFilter = session.selectedCropFilter,
-                onFilterChanged = { viewModel.setCropStageFilter(it) },
+                onFilterChanged = {
+                    haptics.tick()
+                    viewModel.setCropStageFilter(it)
+                },
                 onQuadChanged = { viewModel.updateQuad(it) },
                 onAutoDetectAgain = {
+                    haptics.click()
                     viewModel.onRawBitmapCaptured(session.pendingRawBitmap!!)
                 },
-                onFullPageQuad = { viewModel.resetQuadToFullPage() },
-                onInsetQuad = { viewModel.setInsetDocumentQuad() },
+                onFullPageQuad = {
+                    haptics.tick()
+                    viewModel.resetQuadToFullPage()
+                },
+                onInsetQuad = {
+                    haptics.tick()
+                    viewModel.setInsetDocumentQuad()
+                },
                 onCancel = {
+                    haptics.click()
                     if (session.isEditingExistingPageCrop) {
                         viewModel.cancelCropStage()
                         onProceedToEnhance()
@@ -178,31 +190,50 @@ fun CameraAndEdgeScreen(
                     }
                 },
                 onConfirmWarp = {
+                    haptics.heavy()
                     viewModel.confirmPerspectiveCrop(onNavigateToEnhance = onProceedToEnhance)
                 }
             )
         } else {
             CameraCaptureView(
                 hasCameraPermission = hasCameraPermission,
+                isActiveTab = isActiveTab,
+                showBottomNavClearance = showBottomNavClearance,
                 captureMode = session.captureMode,
                 selectedFilter = session.selectedCropFilter,
-                onFilterSelected = { viewModel.setCropStageFilter(it) },
+                onFilterSelected = {
+                    haptics.tick()
+                    viewModel.setCropStageFilter(it)
+                },
                 capturedPageCount = session.pages.size,
                 idCardFrontCaptured = session.idCardFrontBitmap != null,
                 scannedBarcodes = session.scannedBarcodes,
-                onRequestCameraPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                onModeSelected = { viewModel.setScannerCaptureMode(it) },
-                onBitmapCaptured = { bmp -> viewModel.onRawBitmapCaptured(bmp) },
+                onRequestCameraPermission = {
+                    haptics.click()
+                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                },
+                onModeSelected = {
+                    haptics.tick()
+                    viewModel.setScannerCaptureMode(it)
+                },
+                onBitmapCaptured = { bmp ->
+                    haptics.heavy()
+                    viewModel.onRawBitmapCaptured(bmp)
+                },
                 onOpenGallery = {
                     galleryPickerLauncher.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                     )
                 },
                 onUseSampleDemoPage = {
+                    haptics.heavy()
                     viewModel.onRawBitmapCaptured(ImageProcessor.generateSampleInvoiceBitmap())
                 },
                 onFinishBatch = onProceedToEnhance,
-                onBack = onBack
+                onBack = {
+                    haptics.click()
+                    onBack()
+                }
             )
         }
 
@@ -235,6 +266,8 @@ fun CameraAndEdgeScreen(
 @Composable
 private fun CameraCaptureView(
     hasCameraPermission: Boolean,
+    isActiveTab: Boolean,
+    showBottomNavClearance: Boolean,
     captureMode: ScannerCaptureMode,
     selectedFilter: ScanFilter,
     onFilterSelected: (ScanFilter) -> Unit,
@@ -250,6 +283,7 @@ private fun CameraCaptureView(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val haptics = LocalHaptics.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_AUTO) }
     var cameraRef by remember { mutableStateOf<Camera?>(null) }
@@ -271,6 +305,7 @@ private fun CameraCaptureView(
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
+            .padding(bottom = if (showBottomNavClearance) 82.dp else 4.dp)
     ) {
         // Glass Top Bar
         FrostedGlassCard(
@@ -339,9 +374,9 @@ private fun CameraCaptureView(
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xFF0F172A))
         ) {
-            if (hasCameraPermission) {
+            if (hasCameraPermission && isActiveTab) {
                 val previewView = remember { PreviewView(context) }
-                LaunchedEffect(previewView) {
+                LaunchedEffect(previewView, isActiveTab) {
                     val providerFuture = ProcessCameraProvider.getInstance(context)
                     providerFuture.addListener({
                         runCatching {
@@ -366,6 +401,7 @@ private fun CameraCaptureView(
                         .fillMaxSize()
                         .pointerInput(Unit) {
                             detectTapGestures { offset ->
+                                haptics.tick()
                                 focusTapOffset = offset
                                 val cam = cameraRef ?: return@detectTapGestures
                                 val factory = previewView.meteringPointFactory
@@ -627,6 +663,7 @@ private fun PerspectiveCropStudio(
     onConfirmWarp: () -> Unit
 ) {
     // CRITICAL: rememberUpdatedState prevents pointerInput from restarting & cancelling mid-drag!
+    val haptics = LocalHaptics.current
     val currentQuad by rememberUpdatedState(quad)
     val currentOnQuadChanged by rememberUpdatedState(onQuadChanged)
     var activeHandleIndex by remember { mutableIntStateOf(-1) }
@@ -692,6 +729,7 @@ private fun PerspectiveCropStudio(
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = { offset ->
+                                haptics.tick()
                                 val w = size.width.toFloat().coerceAtLeast(1f)
                                 val h = size.height.toFloat().coerceAtLeast(1f)
                                 val q = currentQuad
@@ -716,7 +754,10 @@ private fun PerspectiveCropStudio(
                                     )
                                 } ?: -1
                             },
-                            onDragEnd = { activeHandleIndex = -1 },
+                            onDragEnd = {
+                                haptics.tick()
+                                activeHandleIndex = -1
+                            },
                             onDragCancel = { activeHandleIndex = -1 },
                             onDrag = { change, dragAmount ->
                                 change.consume()

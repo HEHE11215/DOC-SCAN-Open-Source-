@@ -95,6 +95,7 @@ import com.example.ui.theme.GlassActionButton
 import com.example.ui.theme.GlassScreenBackground
 import com.example.ui.theme.LuminousCyan
 import com.example.ui.viewmodel.DocuScanViewModel
+import com.example.utils.LocalHaptics
 import com.example.utils.ShareExportHelper
 import kotlinx.coroutines.launch
 
@@ -482,6 +483,7 @@ private fun EnhanceControlsPanel(
     onOpenSignDialog: () -> Unit,
     onDeletePage: () -> Unit
 ) {
+    val haptics = LocalHaptics.current
     FrostedGlassCard(
         cornerRadius = 24.dp,
         modifier = Modifier
@@ -510,7 +512,10 @@ private fun EnhanceControlsPanel(
                 orderedFilters.forEach { filter ->
                     FilterChip(
                         selected = activeFilter == filter,
-                        onClick = { onFilterSelected(filter) },
+                        onClick = {
+                            haptics.tick()
+                            onFilterSelected(filter)
+                        },
                         label = { Text(filter.label) },
                         modifier = Modifier.testTag("filter_chip_${filter.name.lowercase()}")
                     )
@@ -520,6 +525,8 @@ private fun EnhanceControlsPanel(
             if (showSliders) {
                 var localBrightness by remember(activeFilter) { androidx.compose.runtime.mutableFloatStateOf(brightness) }
                 var localContrast by remember(activeFilter) { androidx.compose.runtime.mutableFloatStateOf(contrast) }
+                var lastBrightnessStep by remember { mutableIntStateOf(brightness.toInt() / 8) }
+                var lastContrastStep by remember { mutableIntStateOf((contrast * 10f).toInt()) }
 
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(
@@ -533,6 +540,7 @@ private fun EnhanceControlsPanel(
                         )
                         TextButton(
                             onClick = {
+                                haptics.click()
                                 localBrightness = 0f
                                 localContrast = 1f
                                 onBrightnessContrastChange(0f, 1f)
@@ -544,6 +552,11 @@ private fun EnhanceControlsPanel(
                     Slider(
                         value = localBrightness,
                         onValueChange = { newB ->
+                            val step = newB.toInt() / 8
+                            if (step != lastBrightnessStep) {
+                                lastBrightnessStep = step
+                                haptics.tick()
+                            }
                             localBrightness = newB
                             onBrightnessContrastChange(newB, localContrast)
                         },
@@ -557,6 +570,11 @@ private fun EnhanceControlsPanel(
                     Slider(
                         value = localContrast,
                         onValueChange = { newC ->
+                            val step = (newC * 10f).toInt()
+                            if (step != lastContrastStep) {
+                                lastContrastStep = step
+                                haptics.tick()
+                            }
                             localContrast = newC
                             onBrightnessContrastChange(localBrightness, newC)
                         },

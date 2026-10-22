@@ -339,7 +339,7 @@ fun PdfToolsAndConvertScreen(
                                 onClick = { onStartSpecializedScan(ScannerCaptureMode.QR_BARCODE) }
                             )
                         }
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(104.dp))
                     }
                 }
             }

@@ -1,11 +1,16 @@
 package com.example.ui.theme
 
+import android.app.Activity
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,10 +22,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,22 +42,35 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import com.example.domain.model.AppThemeMode
+import com.example.utils.LocalHaptics
+import com.example.utils.rememberHapticController
+import kotlin.math.abs
 
 val LocalIsDarkGlass = compositionLocalOf { false }
 
@@ -114,8 +133,22 @@ fun DocuScanTheme(
     }
 
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val haptics = rememberHapticController()
+    val view = LocalView.current
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalIsDarkGlass provides darkTheme) {
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = !darkTheme
+            insetsController.isAppearanceLightNavigationBars = !darkTheme
+        }
+    }
+
+    CompositionLocalProvider(
+        LocalIsDarkGlass provides darkTheme,
+        LocalHaptics provides haptics
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
@@ -127,7 +160,7 @@ fun DocuScanTheme(
 
 /**
  * Authentic iPhone iOS 18 / visionOS Ambient Mesh Background with soft glowing radial orbs
- * so translucent frosted glass cards visibly refract color and depth in both Light and Dark mode.
+ * that smoothly animate between Light Glass and Dark Glass modes.
  */
 @Composable
 fun GlassScreenBackground(
@@ -135,23 +168,26 @@ fun GlassScreenBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     val isDark = LocalIsDarkGlass.current
-    val baseGradient = if (isDark) {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color(0xFF040814),
-                Color(0xFF0A1428),
-                Color(0xFF050A17)
-            )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color(0xFFD5E5FA),
-                Color(0xFFEAF2FC),
-                Color(0xFFDCE8F8)
-            )
-        )
-    }
+
+    val topBg by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF040814) else Color(0xFFD6E6FB),
+        animationSpec = tween(320),
+        label = "glassTopBg"
+    )
+    val midBg by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF0A1428) else Color(0xFFEBF3FD),
+        animationSpec = tween(320),
+        label = "glassMidBg"
+    )
+    val bottomBg by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF060C1B) else Color(0xFFDCE8F8),
+        animationSpec = tween(320),
+        label = "glassBottomBg"
+    )
+
+    val baseGradient = Brush.verticalGradient(
+        colors = listOf(topBg, midBg, bottomBg)
+    )
 
     Box(
         modifier = modifier
@@ -161,11 +197,10 @@ fun GlassScreenBackground(
                 val w = size.width
                 val h = size.height
                 if (isDark) {
-                    // Glowing iOS Blue top-left orb
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF0A84FF).copy(alpha = 0.34f),
+                                Color(0xFF0A84FF).copy(alpha = 0.32f),
                                 Color.Transparent
                             ),
                             center = Offset(w * 0.15f, h * 0.12f),
@@ -174,11 +209,10 @@ fun GlassScreenBackground(
                         radius = w * 0.65f,
                         center = Offset(w * 0.15f, h * 0.12f)
                     )
-                    // Glowing Indigo right-middle orb
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF5E5CE6).copy(alpha = 0.28f),
+                                Color(0xFF5E5CE6).copy(alpha = 0.25f),
                                 Color.Transparent
                             ),
                             center = Offset(w * 0.88f, h * 0.42f),
@@ -187,25 +221,23 @@ fun GlassScreenBackground(
                         radius = w * 0.60f,
                         center = Offset(w * 0.88f, h * 0.42f)
                     )
-                    // Glowing Cyan bottom-left orb
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF5AC8FA).copy(alpha = 0.22f),
+                                Color(0xFF5AC8FA).copy(alpha = 0.24f),
                                 Color.Transparent
                             ),
-                            center = Offset(w * 0.25f, h * 0.85f),
-                            radius = w * 0.60f
+                            center = Offset(w * 0.28f, h * 0.88f),
+                            radius = w * 0.65f
                         ),
-                        radius = w * 0.60f,
-                        center = Offset(w * 0.25f, h * 0.85f)
+                        radius = w * 0.65f,
+                        center = Offset(w * 0.28f, h * 0.88f)
                     )
                 } else {
-                    // Soft Sky Blue top-left orb
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF60A5FA).copy(alpha = 0.36f),
+                                Color(0xFF60A5FA).copy(alpha = 0.34f),
                                 Color.Transparent
                             ),
                             center = Offset(w * 0.12f, h * 0.10f),
@@ -214,11 +246,10 @@ fun GlassScreenBackground(
                         radius = w * 0.65f,
                         center = Offset(w * 0.12f, h * 0.10f)
                     )
-                    // Soft Periwinkle Violet right orb
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF818CF8).copy(alpha = 0.26f),
+                                Color(0xFF818CF8).copy(alpha = 0.24f),
                                 Color.Transparent
                             ),
                             center = Offset(w * 0.90f, h * 0.38f),
@@ -227,18 +258,17 @@ fun GlassScreenBackground(
                         radius = w * 0.60f,
                         center = Offset(w * 0.90f, h * 0.38f)
                     )
-                    // Soft Aqua bottom orb
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF38BDF8).copy(alpha = 0.25f),
+                                Color(0xFF38BDF8).copy(alpha = 0.26f),
                                 Color.Transparent
                             ),
-                            center = Offset(w * 0.25f, h * 0.85f),
+                            center = Offset(w * 0.28f, h * 0.88f),
                             radius = w * 0.65f
                         ),
                         radius = w * 0.65f,
-                        center = Offset(w * 0.25f, h * 0.85f)
+                        center = Offset(w * 0.28f, h * 0.88f)
                     )
                 }
             },
@@ -247,8 +277,8 @@ fun GlassScreenBackground(
 }
 
 /**
- * Smooth iPhone iOS Frosted Glass Card with diagonal translucent refraction sheen
- * and specular top-left highlight border.
+ * Smooth iPhone iOS Frosted Glass Card with diagonal translucent refraction sheen,
+ * specular top-left highlight border, and tactile haptic feedback on tap.
  */
 @Composable
 fun FrostedGlassCard(
@@ -258,21 +288,22 @@ fun FrostedGlassCard(
     content: @Composable () -> Unit
 ) {
     val isDark = LocalIsDarkGlass.current
+    val haptics = LocalHaptics.current
     val shape = RoundedCornerShape(cornerRadius)
 
     val glassFillBrush = if (isDark) {
         Brush.linearGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.15f),
-                Color(0xFF1E293B).copy(alpha = 0.55f),
-                Color(0xFF0F172A).copy(alpha = 0.68f)
+                Color.White.copy(alpha = 0.14f),
+                Color(0xFF1E293B).copy(alpha = 0.50f),
+                Color(0xFF0F172A).copy(alpha = 0.62f)
             )
         )
     } else {
         Brush.linearGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.78f),
-                Color.White.copy(alpha = 0.54f),
+                Color.White.copy(alpha = 0.76f),
+                Color.White.copy(alpha = 0.52f),
                 Color(0xFFF0F7FF).copy(alpha = 0.64f)
             )
         )
@@ -281,15 +312,15 @@ fun FrostedGlassCard(
     val specularBorderBrush = if (isDark) {
         Brush.linearGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.38f),
+                Color.White.copy(alpha = 0.36f),
                 Color.White.copy(alpha = 0.10f),
-                Color(0xFF38BDF8).copy(alpha = 0.22f)
+                Color(0xFF38BDF8).copy(alpha = 0.20f)
             )
         )
     } else {
         Brush.linearGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.98f),
+                Color.White.copy(alpha = 0.96f),
                 Color.White.copy(alpha = 0.45f),
                 Color.White.copy(alpha = 0.85f)
             )
@@ -299,25 +330,31 @@ fun FrostedGlassCard(
     val topGlintColor = if (isDark) {
         Color.White.copy(alpha = 0.22f)
     } else {
-        Color.White.copy(alpha = 0.90f)
+        Color.White.copy(alpha = 0.88f)
     }
 
     val cardModifier = modifier
         .clip(shape)
         .background(brush = glassFillBrush, shape = shape)
-        .border(width = 1.2.dp, brush = specularBorderBrush, shape = shape)
+        .border(width = 1.1.dp, brush = specularBorderBrush, shape = shape)
         .drawWithContent {
             drawContent()
-            // Subtle iPhone top-edge specular refraction line
             drawLine(
                 color = topGlintColor,
                 start = Offset(cornerRadius.toPx() * 0.6f, 1.dp.toPx()),
                 end = Offset(size.width - cornerRadius.toPx() * 0.6f, 1.dp.toPx()),
-                strokeWidth = 1.2.dp.toPx()
+                strokeWidth = 1.1.dp.toPx()
             )
         }
         .then(
-            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            if (onClick != null) {
+                Modifier.clickable {
+                    haptics.click()
+                    onClick()
+                }
+            } else {
+                Modifier
+            }
         )
 
     Box(modifier = cardModifier) {
@@ -326,8 +363,7 @@ fun FrostedGlassCard(
 }
 
 /**
- * Adaptive, strictly aligned iOS Frosted Glass Action Button.
- * Enforces uniform height, compact padding, and single-line text so buttons never wrap or misalign on any screen size.
+ * Adaptive, strictly aligned iOS Frosted Glass Action Button with built-in tactile haptics.
  */
 @Composable
 fun GlassActionButton(
@@ -339,11 +375,15 @@ fun GlassActionButton(
     height: Dp = 44.dp
 ) {
     val isDark = LocalIsDarkGlass.current
+    val haptics = LocalHaptics.current
     val shape = RoundedCornerShape(14.dp)
 
     if (isPrimary) {
         Button(
-            onClick = onClick,
+            onClick = {
+                haptics.click()
+                onClick()
+            },
             shape = shape,
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
             colors = ButtonDefaults.buttonColors(
@@ -406,7 +446,10 @@ fun GlassActionButton(
                 .clip(shape)
                 .background(fillBrush, shape)
                 .border(1.dp, borderBrush, shape)
-                .clickable(onClick = onClick)
+                .clickable {
+                    haptics.click()
+                    onClick()
+                }
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -437,7 +480,7 @@ fun GlassActionButton(
 }
 
 /**
- * 1-Tap iPhone Glass Light / Dark Mode Switch Pill for headers & settings.
+ * 1-Tap iPhone Glass Light / Dark Mode Switch Pill for headers & settings with vibration haptics.
  */
 @Composable
 fun GlassThemeTogglePill(
@@ -445,19 +488,23 @@ fun GlassThemeTogglePill(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = LocalHaptics.current
     val bg by animateColorAsState(
-        targetValue = if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.78f),
-        animationSpec = tween(220),
+        targetValue = if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.76f),
+        animationSpec = tween(250),
         label = "glassToggleBg"
     )
     val border by animateColorAsState(
-        targetValue = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White,
-        animationSpec = tween(220),
+        targetValue = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.95f),
+        animationSpec = tween(250),
         label = "glassToggleBorder"
     )
 
     Surface(
-        onClick = onToggle,
+        onClick = {
+            haptics.click()
+            onToggle()
+        },
         shape = CircleShape,
         color = bg,
         border = BorderStroke(1.dp, border),
@@ -493,155 +540,234 @@ data class LiquidGlassNavTab(
 )
 
 /**
- * Floating iPhone iOS Liquid Glass Bottom Navigation Dock.
- * Features translucent frosted acrylic gradient, specular 1.2dp refraction border,
- * top edge highlight glint, and animated glowing pill capsules for the active tab.
+ * Seamless iPhone iOS 18 / visionOS Liquid Glass Bottom Navigation Bar.
+ * - Blends organically into both Light Mode and Dark Mode with feather-soft bottom ambient diffusion.
+ * - Supports continuous swipe-linked liquid capsule indicator (`selectedProgress`) that glides
+ *   smoothly as the user swipes left/right between Library, Scan, Tools, and Settings.
+ * - Triggers crisp tactile vibration haptics on every tab press.
  */
 @Composable
 fun LiquidGlassBottomBar(
     tabs: List<LiquidGlassNavTab>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedProgress: Float? = null
 ) {
     val isDark = LocalIsDarkGlass.current
-    val dockShape = RoundedCornerShape(28.dp)
+    val haptics = LocalHaptics.current
+    val dockShape = RoundedCornerShape(32.dp)
 
-    val dockFillBrush = if (isDark) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.78f),
-                Color(0xFF0F172A).copy(alpha = 0.88f),
-                Color(0xFF091224).copy(alpha = 0.92f)
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.86f),
-                Color(0xFFF0F7FF).copy(alpha = 0.78f),
-                Color.White.copy(alpha = 0.88f)
-            )
-        )
-    }
+    val activeIndex = tabs.indexOfFirst { it.selected }.coerceAtLeast(0)
+    val targetProgress = (selectedProgress ?: activeIndex.toFloat())
+        .coerceIn(0f, (tabs.size - 1).coerceAtLeast(0).toFloat())
 
-    val dockBorderBrush = if (isDark) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.42f),
-                Color(0xFF38BDF8).copy(alpha = 0.25f),
-                Color.White.copy(alpha = 0.14f)
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White,
-                Color(0xFFBAE6FD).copy(alpha = 0.75f),
-                Color.White.copy(alpha = 0.92f)
-            )
-        )
-    }
+    val smoothProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = spring(
+            dampingRatio = 0.84f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "liquidPillProgress"
+    )
+
+    // Animated translucent glass colors so switching Light <-> Dark mode melts seamlessly
+    val glassStart by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF1E293B).copy(alpha = 0.56f) else Color.White.copy(alpha = 0.64f),
+        animationSpec = tween(300),
+        label = "dockGlassStart"
+    )
+    val glassMid by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF0F172A).copy(alpha = 0.64f) else Color(0xFFEFF6FF).copy(alpha = 0.54f),
+        animationSpec = tween(300),
+        label = "dockGlassMid"
+    )
+    val glassEnd by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF172554).copy(alpha = 0.52f) else Color.White.copy(alpha = 0.68f),
+        animationSpec = tween(300),
+        label = "dockGlassEnd"
+    )
+
+    val borderTop by animateColorAsState(
+        targetValue = if (isDark) Color.White.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.94f),
+        animationSpec = tween(300),
+        label = "dockBorderTop"
+    )
+    val borderMid by animateColorAsState(
+        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.22f) else Color(0xFF93C5FD).copy(alpha = 0.45f),
+        animationSpec = tween(300),
+        label = "dockBorderMid"
+    )
+    val borderBottom by animateColorAsState(
+        targetValue = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.72f),
+        animationSpec = tween(300),
+        label = "dockBorderBottom"
+    )
+
+    val pillFillTop by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF0A84FF).copy(alpha = 0.34f) else Color.White.copy(alpha = 0.88f),
+        animationSpec = tween(250),
+        label = "pillFillTop"
+    )
+    val pillFillBottom by animateColorAsState(
+        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.18f) else Color(0xFFDBEAFE).copy(alpha = 0.78f),
+        animationSpec = tween(250),
+        label = "pillFillBottom"
+    )
+    val pillStrokeColor by animateColorAsState(
+        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.58f) else RoyalBlue.copy(alpha = 0.28f),
+        animationSpec = tween(250),
+        label = "pillStroke"
+    )
+
+    val ambientScrimColor by animateColorAsState(
+        targetValue = if (isDark) Color(0xFF050A16).copy(alpha = 0.52f) else Color(0xFFDCE8F8).copy(alpha = 0.55f),
+        animationSpec = tween(300),
+        label = "ambientScrim"
+    )
 
     val topGlintColor = if (isDark) {
-        Color.White.copy(alpha = 0.30f)
+        Color.White.copy(alpha = 0.28f)
     } else {
-        Color.White.copy(alpha = 0.96f)
+        Color.White.copy(alpha = 0.95f)
     }
 
+    // Outer container with soft bottom ambient diffusion veil so the floating glass dock
+    // melts organically into both Light and Dark mode backgrounds without any seam.
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .drawBehind {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            ambientScrimColor.copy(alpha = ambientScrimColor.alpha * 0.45f),
+                            ambientScrimColor
+                        )
+                    )
+                )
+            }
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier
+                .widthIn(max = 500.dp)
                 .fillMaxWidth()
                 .clip(dockShape)
-                .background(brush = dockFillBrush, shape = dockShape)
-                .border(width = 1.25.dp, brush = dockBorderBrush, shape = dockShape)
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(glassStart, glassMid, glassEnd)
+                    ),
+                    shape = dockShape
+                )
+                .border(
+                    width = 1.15.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(borderTop, borderMid, borderBottom)
+                    ),
+                    shape = dockShape
+                )
                 .drawWithContent {
+                    val tabCount = tabs.size.coerceAtLeast(1)
+                    val horizontalPad = 6.dp.toPx()
+                    val verticalPad = 5.dp.toPx()
+                    val availableWidth = (size.width - horizontalPad * 2f).coerceAtLeast(1f)
+                    val slotWidth = availableWidth / tabCount
+                    val pillLeft = horizontalPad + smoothProgress * slotWidth
+                    val pillHeight = (size.height - verticalPad * 2f).coerceAtLeast(1f)
+                    val pillCorner = CornerRadius(26.dp.toPx(), 26.dp.toPx())
+
+                    // Continuous sliding Liquid Glass Active Pill
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(pillFillTop, pillFillBottom),
+                            startY = verticalPad,
+                            endY = verticalPad + pillHeight
+                        ),
+                        topLeft = Offset(pillLeft, verticalPad),
+                        size = Size(slotWidth, pillHeight),
+                        cornerRadius = pillCorner
+                    )
+                    drawRoundRect(
+                        color = pillStrokeColor,
+                        topLeft = Offset(pillLeft, verticalPad),
+                        size = Size(slotWidth, pillHeight),
+                        cornerRadius = pillCorner,
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+
                     drawContent()
+
+                    // Specular top-edge liquid light refraction highlight
                     drawLine(
                         color = topGlintColor,
-                        start = Offset(24.dp.toPx(), 1.2.dp.toPx()),
-                        end = Offset(size.width - 24.dp.toPx(), 1.2.dp.toPx()),
-                        strokeWidth = 1.4.dp.toPx()
+                        start = Offset(28.dp.toPx(), 1.1.dp.toPx()),
+                        end = Offset(size.width - 28.dp.toPx(), 1.1.dp.toPx()),
+                        strokeWidth = 1.25.dp.toPx()
                     )
                 }
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 6.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            tabs.forEach { tab ->
-                val pillBg by animateColorAsState(
-                    targetValue = when {
-                        tab.selected && isDark -> Color(0xFF0A84FF).copy(alpha = 0.28f)
-                        tab.selected && !isDark -> RoyalBlue.copy(alpha = 0.14f)
-                        else -> Color.Transparent
-                    },
-                    animationSpec = tween(220),
-                    label = "navPillBg"
-                )
-                val pillBorder by animateColorAsState(
-                    targetValue = when {
-                        tab.selected && isDark -> LuminousCyan.copy(alpha = 0.55f)
-                        tab.selected && !isDark -> RoyalBlue.copy(alpha = 0.35f)
-                        else -> Color.Transparent
-                    },
-                    animationSpec = tween(220),
-                    label = "navPillBorder"
-                )
+            tabs.forEachIndexed { index, tab ->
+                val distance = abs(smoothProgress - index.toFloat()).coerceIn(0f, 1f)
+                val selectionFraction = 1f - distance
+
                 val contentTint by animateColorAsState(
                     targetValue = when {
-                        tab.selected && isDark -> LuminousCyan
-                        tab.selected && !isDark -> RoyalBlue
+                        selectionFraction > 0.5f && isDark -> LuminousCyan
+                        selectionFraction > 0.5f && !isDark -> RoyalBlue
                         isDark -> Color(0xFF94A3B8)
                         else -> Color(0xFF475569)
                     },
-                    animationSpec = tween(220),
-                    label = "navContentTint"
+                    animationSpec = tween(180),
+                    label = "navContentTint_$index"
                 )
 
-                val itemShape = RoundedCornerShape(20.dp)
-                Column(
+                val iconScale = 1f + (0.10f * selectionFraction)
+                val interactionSource = remember { MutableInteractionSource() }
+
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(itemShape)
-                        .background(pillBg, itemShape)
-                        .border(1.dp, pillBorder, itemShape)
-                        .clickable(onClick = tab.onClick)
+                        .clip(RoundedCornerShape(24.dp))
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = {
+                                haptics.click()
+                                tab.onClick()
+                            }
+                        )
                         .padding(vertical = 7.dp, horizontal = 4.dp)
-                        .then(Modifier),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .testTag(tab.testTag),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.testTag(tab.testTag),
-                        contentAlignment = Alignment.Center
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label,
-                                tint = contentTint,
-                                modifier = Modifier.size(21.dp)
-                            )
-                            Text(
-                                text = tab.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (tab.selected) FontWeight.Bold else FontWeight.Medium,
-                                color = contentTint,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            tint = contentTint,
+                            modifier = Modifier
+                                .size(21.dp)
+                                .scale(iconScale)
+                        )
+                        Text(
+                            text = tab.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (selectionFraction > 0.5f) FontWeight.Bold else FontWeight.Medium,
+                            color = contentTint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
         }
     }
 }
-

@@ -355,7 +355,38 @@ fun SettingsScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    // Release & GitHub Build Info Card
+                    SettingsCard(
+                        title = "Doc Scan Release",
+                        icon = Icons.Default.CloudSync
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Version",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "v1.0.0 (Build 1 • Release Ready)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Text(
+                                text = "GitHub Actions CI/CD is configured in .github/workflows/build-apk.yml to automatically build & publish Doc-Scan-v1.0.0-release.apk and Doc-Scan-v1.0.0-debug.apk to GitHub Releases on every push.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(108.dp))
                 }
             }
         }
@@ -457,7 +488,7 @@ fun AppLockGateScreen(
                 }
             )
             val info = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Unlock DocuScan")
+                .setTitle("Unlock Doc Scan")
                 .setSubtitle("Authenticate with Biometrics or PIN")
                 .setAllowedAuthenticators(
                     BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -498,7 +529,7 @@ fun AppLockGateScreen(
                         modifier = Modifier.size(48.dp)
                     )
                     Text(
-                        text = "DocuScan Locked",
+                        text = "Doc Scan Locked",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )

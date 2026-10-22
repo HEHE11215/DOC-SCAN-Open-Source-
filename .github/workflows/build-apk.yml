@@ -1,15 +1,24 @@
-name: Build Android APK
+name: Build & Release Doc Scan APK
 
 on:
   push:
     branches: [ "**" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to publish (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
 
 jobs:
-  build-apk:
-    name: Build DocuScan APK
+  build-and-release:
+    name: Build & Release Doc Scan APK
     runs-on: ubuntu-latest
 
     steps:
@@ -38,13 +47,23 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Prepare Keystore & Environment
+      - name: Prepare Keystores & Environment
         run: |
+          # 1. Debug Keystore
           if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
             base64 -d debug.keystore.base64 > debug.keystore
           elif [ ! -f "debug.keystore" ]; then
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
+
+          # 2. Release Keystore (auto-generated if not provided so assembleRelease works out-of-the-box)
+          RELEASE_KEYSTORE="${RUNNER_TEMP}/doc-scan-release.jks"
+          keytool -genkey -v -keystore "$RELEASE_KEYSTORE" -storepass docscanrelease -alias upload -keypass docscanrelease -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Doc Scan,O=Doc Scan Release,C=US"
+          echo "KEYSTORE_PATH=$RELEASE_KEYSTORE" >> $GITHUB_ENV
+          echo "STORE_PASSWORD=docscanrelease" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=docscanrelease" >> $GITHUB_ENV
+
+          # 3. Environment file for Secrets Gradle Plugin
           if [ ! -f ".env" ]; then
             if [ -f ".env.example" ]; then
               cp .env.example .env
@@ -53,18 +72,47 @@ jobs:
             fi
           fi
 
-      - name: Upload Built APK Artifact
+      - name: Build Release & Debug APKs
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleRelease assembleDebug --no-daemon --stacktrace
+          else
+            gradle assembleRelease assembleDebug --no-daemon --stacktrace
+          fi
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/release/*.apk release-artifacts/Doc-Scan-v1.0.0-release.apk
+          cp app/build/outputs/apk/debug/*.apk release-artifacts/Doc-Scan-v1.0.0-debug.apk
+
+      - name: Upload Doc Scan APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DocuScan-APK
-          path: app/build/outputs/apk*.apk
+          name: Doc-Scan-v1.0.0-APKs
+          path: release-artifacts/*.apk
           if-no-files-found: error
-      - name: Update Latest GitHub Release
+
+      - name: Publish GitHub Release (Doc Scan v1.0.0)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: latest
-          name: "DocuScan-APK"
-          body: "Download **DocuScan.apk** below and install it on any Android device."
+          tag_name: ${{ github.event.inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.0.0' }}
+          name: "Doc Scan v1.0.0"
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Doc Scan v1.0.0 Release
+
+            ### Highlights
+            - **Seamless iOS Liquid Glass UI**: Full Light Glass and Dark Glass dual-mode design with floating translucent bottom navigation, spring-animated liquid selection capsule, and tactile vibration haptics.
+            - **Horizontal Swipe Navigation**: Smoothly swipe left and right across **Library**, **Scan**, **Tools**, and **Settings** tabs.
+            - **Smart Document Clear Mode**: Built-in **Clear Mode** default enhancement on capture and upload that whitens paper backgrounds and sharpens text without harsh thresholding, plus Original, Clear B&W, Magic Color, and Grayscale filters.
+            - **Real-Time Brightness & Contrast**: Instant GPU `ColorFilter` preview during slider drag with debounced high-res bitmap commits.
+            - **PDF Signature & Watermark Overlay**: Draw custom digital signatures and impose them directly onto scanned pages or external PDFs.
+            - **Multi-Script Offline OCR**: Extract text in Latin, Devanagari, Chinese, Japanese, and Korean scripts, export to `.txt` or searchable PDF, and convert OCR text directly into formatted PDFs.
+
+            ### Downloads
+            - **`Doc-Scan-v1.0.0-release.apk`** — Signed Release APK ready to install on any Android 8.0+ (API 26+) device.
+            - **`Doc-Scan-v1.0.0-debug.apk`** — Debug APK build.
           files: |
-            apk/DocuScan.apk
+            release-artifacts/Doc-Scan-v1.0.0-release.apk
+            release-artifacts/Doc-Scan-v1.0.0-debug.apk

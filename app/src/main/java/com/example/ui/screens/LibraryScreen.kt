@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -98,6 +99,7 @@ import com.example.ui.theme.LocalIsDarkGlass
 import com.example.ui.theme.RoyalBlue
 import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.ui.viewmodel.ScannerCaptureMode
+import com.example.utils.LocalHaptics
 import com.example.utils.ShareExportHelper
 import java.io.File
 import java.text.SimpleDateFormat
@@ -112,6 +114,7 @@ fun LibraryScreen(
     onOpenDocument: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val haptics = LocalHaptics.current
     val isDark = LocalIsDarkGlass.current
     val documents by viewModel.filteredDocuments.collectAsState()
     val folders by viewModel.folders.collectAsState()
@@ -222,7 +225,7 @@ fun LibraryScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "DocuScan",
+                        text = "Doc Scan",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -242,7 +245,10 @@ fun LibraryScreen(
                             modifier = Modifier.testTag("header_theme_toggle")
                         )
                         IconButton(
-                            onClick = { viewModel.toggleFavoritesOnly() },
+                            onClick = {
+                                haptics.tick()
+                                viewModel.toggleFavoritesOnly()
+                            },
                             modifier = Modifier.testTag("favorites_filter_button")
                         ) {
                             Icon(
@@ -252,7 +258,10 @@ fun LibraryScreen(
                             )
                         }
                         IconButton(
-                            onClick = { viewModel.toggleGridView() },
+                            onClick = {
+                                haptics.tick()
+                                viewModel.toggleGridView()
+                            },
                             modifier = Modifier.testTag("grid_list_toggle_button")
                         ) {
                             Icon(
@@ -446,7 +455,7 @@ fun LibraryScreen(
                 } else if (settings.isGridView) {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 156.dp),
-                        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
+                        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 128.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize()
@@ -456,14 +465,21 @@ fun LibraryScreen(
                                 doc = doc,
                                 isSelected = doc.id in selectedDocIds,
                                 onClick = {
+                                    haptics.click()
                                     if (selectedDocIds.isNotEmpty()) {
                                         viewModel.toggleDocSelection(doc.id)
                                     } else {
                                         onOpenDocument(doc.id)
                                     }
                                 },
-                                onLongClick = { viewModel.toggleDocSelection(doc.id) },
-                                onToggleFavorite = { viewModel.toggleFavorite(doc) },
+                                onLongClick = {
+                                    haptics.heavy()
+                                    viewModel.toggleDocSelection(doc.id)
+                                },
+                                onToggleFavorite = {
+                                    haptics.tick()
+                                    viewModel.toggleFavorite(doc)
+                                },
                                 onRename = { newTitle -> viewModel.renameDocument(doc, newTitle) },
                                 onDelete = { viewModel.deleteDocument(doc.id) },
                                 onShare = {
@@ -478,7 +494,7 @@ fun LibraryScreen(
                     }
                 } else {
                     LazyColumn(
-                        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
+                        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 128.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
@@ -487,14 +503,21 @@ fun LibraryScreen(
                                 doc = doc,
                                 isSelected = doc.id in selectedDocIds,
                                 onClick = {
+                                    haptics.click()
                                     if (selectedDocIds.isNotEmpty()) {
                                         viewModel.toggleDocSelection(doc.id)
                                     } else {
                                         onOpenDocument(doc.id)
                                     }
                                 },
-                                onLongClick = { viewModel.toggleDocSelection(doc.id) },
-                                onToggleFavorite = { viewModel.toggleFavorite(doc) },
+                                onLongClick = {
+                                    haptics.heavy()
+                                    viewModel.toggleDocSelection(doc.id)
+                                },
+                                onToggleFavorite = {
+                                    haptics.tick()
+                                    viewModel.toggleFavorite(doc)
+                                },
                                 onRename = { newTitle -> viewModel.renameDocument(doc, newTitle) },
                                 onDelete = { viewModel.deleteDocument(doc.id) },
                                 onShare = {
@@ -510,16 +533,20 @@ fun LibraryScreen(
                 }
             }
 
-            // Floating Action Button to launch Camera Scanner
+            // Floating Action Button to launch Camera Scanner cleanly above the floating LiquidGlassBottomBar
             ExtendedFloatingActionButton(
-                onClick = { onLaunchScanner(ScannerCaptureMode.STANDARD_BATCH) },
+                onClick = {
+                    haptics.click()
+                    onLaunchScanner(ScannerCaptureMode.STANDARD_BATCH)
+                },
                 icon = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
                 text = { Text("Scan", fontWeight = FontWeight.Bold) },
                 containerColor = RoyalBlue,
                 contentColor = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(18.dp)
+                    .navigationBarsPadding()
+                    .padding(end = 18.dp, bottom = 84.dp)
                     .testTag("fab_scan_document")
             )
         }

@@ -1,6 +1,6 @@
 {
-  "name": "DocuScan",
-  "description": "All-in-one PDF scanner, multi-script OCR engine, PDF toolkit, and Gemini AI document assistant with local and cloud sync.",
+  "name": "Doc Scan",
+  "description": "All-in-one PDF scanner, Clear Mode document enhancer, multi-script OCR engine, PDF signature & toolkit, with Liquid Glass UI.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
