@@ -987,6 +987,77 @@ class DocuScanViewModel(
         }
     }
 
+    fun applyOfficialStampToDocument(
+        docId: String,
+        stampText: String,
+        subText: String = "",
+        inkColor: Int = android.graphics.Color.rgb(210, 32, 48),
+        pageIndex: Int = -1,
+        normX: Float = 0.60f,
+        normY: Float = 0.14f,
+        scale: Float = 0.34f
+    ) {
+        viewModelScope.launch {
+            val stampBmp = ImageProcessor.createOfficialStampBitmap(
+                stampText = stampText,
+                subText = subText,
+                inkColor = inkColor
+            )
+            documentRepository.rebuildDocumentPdf(
+                docId = docId,
+                signatureBitmap = stampBmp,
+                signaturePageIndex = pageIndex,
+                signatureNormX = normX,
+                signatureNormY = normY,
+                signatureScale = scale
+            )
+            val targetLabel = if (pageIndex == -1) "all pages" else "Page ${pageIndex + 1}"
+            showStatus("Stamped \"${stampText.trim().uppercase()}\" on $targetLabel")
+        }
+    }
+
+    fun createPdfFromTextNote(
+        title: String,
+        bodyText: String,
+        includeRuledLines: Boolean = false,
+        onCreated: (String) -> Unit
+    ) {
+        if (bodyText.isBlank() && title.isBlank()) {
+            showStatus("Enter note text or title to generate PDF")
+            return
+        }
+        viewModelScope.launch {
+            _scanSession.update {
+                it.copy(isProcessing = true, processingMessage = "Formatting Text Note to PDF...")
+            }
+            val pageBitmaps = ImageProcessor.renderTextNotePagesToBitmaps(
+                title = title,
+                bodyText = bodyText,
+                includeRuledLines = includeRuledLines
+            )
+            val drafts = pageBitmaps.mapIndexed { idx, bmp ->
+                DraftScannedPage(
+                    originalBitmap = bmp,
+                    croppedBitmap = bmp,
+                    enhancedBitmap = bmp,
+                    filter = ScanFilter.ORIGINAL,
+                    ocrText = if (idx == 0) bodyText else ""
+                )
+            }
+            val savedDoc = documentRepository.saveDraftDocument(
+                title = title.ifBlank { "Note_${System.currentTimeMillis() / 1000}" },
+                category = DocumentCategory.SCAN.label,
+                pages = drafts,
+                pageSize = PdfPageSize.A4,
+                quality = PdfQuality.HIGH,
+                isSearchable = true
+            )
+            _scanSession.update { it.copy(isProcessing = false, processingMessage = "") }
+            showStatus("Created PDF \"${savedDoc.title}\" (${savedDoc.pageCount} page(s))")
+            onCreated(savedDoc.id)
+        }
+    }
+
     fun setDocumentPassword(doc: ScannedDocumentEntity, newPassword: String) {
         viewModelScope.launch {
             val hash = PdfEngine.hashPassword(newPassword)

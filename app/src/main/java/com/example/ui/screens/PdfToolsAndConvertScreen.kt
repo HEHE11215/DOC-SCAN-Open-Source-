@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.filled.Approval
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.ContactMail
@@ -76,10 +78,12 @@ private enum class ActivePdfToolDialog {
     NONE,
     MERGE_PDF,
     SPLIT_PDF,
+    TEXT_TO_PDF,
     PICK_DOC_FOR_BW,
     PICK_DOC_FOR_COMPRESS,
     PICK_DOC_FOR_WATERMARK,
     PICK_DOC_FOR_SIGNATURE,
+    PICK_DOC_FOR_STAMP,
     PICK_DOC_FOR_PASSWORD,
     PICK_DOC_FOR_JPG,
     PICK_DOC_FOR_PNG,
@@ -103,6 +107,7 @@ fun PdfToolsAndConvertScreen(
 
     var showWatermarkForTarget by remember { mutableStateOf(false) }
     var showSignatureForTarget by remember { mutableStateOf(false) }
+    var showStampForTarget by remember { mutableStateOf(false) }
     var showPasswordForTarget by remember { mutableStateOf(false) }
     var showCompressForTarget by remember { mutableStateOf(false) }
 
@@ -227,6 +232,16 @@ fun PdfToolsAndConvertScreen(
                                     onClick = { activeDialog = ActivePdfToolDialog.PICK_DOC_FOR_SIGNATURE }
                                 )
                                 ToolActionCard(
+                                    title = "Stamp PDF",
+                                    subtitle = "Approved / Paid",
+                                    icon = Icons.Default.Approval,
+                                    testTag = "tool_stamp_pdf",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { activeDialog = ActivePdfToolDialog.PICK_DOC_FOR_STAMP }
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                ToolActionCard(
                                     title = "Watermark",
                                     subtitle = "Text & page #",
                                     icon = Icons.Default.FormatListNumbered,
@@ -234,8 +249,6 @@ fun PdfToolsAndConvertScreen(
                                     modifier = Modifier.weight(1f),
                                     onClick = { activeDialog = ActivePdfToolDialog.PICK_DOC_FOR_WATERMARK }
                                 )
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 ToolActionCard(
                                     title = "Lock PDF",
                                     subtitle = "Password lock",
@@ -243,6 +256,16 @@ fun PdfToolsAndConvertScreen(
                                     testTag = "tool_password_pdf",
                                     modifier = Modifier.weight(1f),
                                     onClick = { activeDialog = ActivePdfToolDialog.PICK_DOC_FOR_PASSWORD }
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                ToolActionCard(
+                                    title = "Text to PDF",
+                                    subtitle = "Notes to PDF",
+                                    icon = Icons.AutoMirrored.Filled.NoteAdd,
+                                    testTag = "tool_text_to_pdf",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { activeDialog = ActivePdfToolDialog.TEXT_TO_PDF }
                                 )
                                 ToolActionCard(
                                     title = "Import PDF",
@@ -423,6 +446,33 @@ fun PdfToolsAndConvertScreen(
             )
         }
 
+        ActivePdfToolDialog.PICK_DOC_FOR_STAMP -> {
+            PickSingleDocumentDialog(
+                title = "Stamp PDF",
+                documents = allDocs,
+                onDismiss = { activeDialog = ActivePdfToolDialog.NONE },
+                onSelected = { doc ->
+                    activeDialog = ActivePdfToolDialog.NONE
+                    targetDoc = doc
+                    showStampForTarget = true
+                }
+            )
+        }
+
+        ActivePdfToolDialog.TEXT_TO_PDF -> {
+            TextToPdfDialog(
+                onDismiss = { activeDialog = ActivePdfToolDialog.NONE },
+                onCreatePdf = { title, body ->
+                    activeDialog = ActivePdfToolDialog.NONE
+                    viewModel.createPdfFromTextNote(
+                        title = title,
+                        bodyText = body,
+                        onCreated = onOpenDocument
+                    )
+                }
+            )
+        }
+
         ActivePdfToolDialog.PICK_DOC_FOR_PASSWORD -> {
             PickSingleDocumentDialog(
                 title = "Password Lock",
@@ -514,6 +564,32 @@ fun PdfToolsAndConvertScreen(
         )
     }
 
+    if (showStampForTarget && currentTarget != null) {
+        var previewBmp by remember(currentTarget.thumbnailPath) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        androidx.compose.runtime.LaunchedEffect(currentTarget.thumbnailPath) {
+            previewBmp = com.example.utils.ImageProcessor.loadBitmapFromPath(currentTarget.thumbnailPath)
+        }
+        OfficialStampDialog(
+            onDismiss = { showStampForTarget = false },
+            pagePreviewBitmap = previewBmp,
+            pageCount = currentTarget.pageCount.coerceAtLeast(1),
+            onStampImposed = { stampText, subText, colorArgb, pageIdx, normX, normY, scale ->
+                showStampForTarget = false
+                viewModel.applyOfficialStampToDocument(
+                    docId = currentTarget.id,
+                    stampText = stampText,
+                    subText = subText,
+                    inkColor = colorArgb,
+                    pageIndex = pageIdx,
+                    normX = normX,
+                    normY = normY,
+                    scale = scale
+                )
+                onOpenDocument(currentTarget.id)
+            }
+        )
+    }
+
     if (showPasswordForTarget && currentTarget != null) {
         PasswordManageDialog(
             isCurrentlyProtected = currentTarget.isPasswordProtected,
@@ -577,6 +653,7 @@ private fun ToolActionCard(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -631,6 +708,7 @@ private fun SpecializedScannerBanner(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -846,3 +924,61 @@ private fun PickSingleDocumentDialog(
         }
     )
 }
+
+@Composable
+private fun TextToPdfDialog(
+    onDismiss: () -> Unit,
+    onCreatePdf: (title: String, body: String) -> Unit
+) {
+    var title by remember { mutableStateOf("Note_${System.currentTimeMillis() / 1000}") }
+    var bodyText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Text / Notes to PDF Generator",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Type or paste notes, meeting minutes, or agreements to generate a formatted multi-page searchable PDF.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("PDF Document Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = bodyText,
+                    onValueChange = { bodyText = it },
+                    label = { Text("Document Body Content") },
+                    placeholder = { Text("Enter or paste your text here...") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onCreatePdf(title.trim().ifBlank { "Document_Note" }, bodyText) },
+                enabled = bodyText.isNotBlank(),
+                modifier = Modifier.testTag("confirm_text_to_pdf_button")
+            ) {
+                Text("Generate PDF")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+

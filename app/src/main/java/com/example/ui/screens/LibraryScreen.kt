@@ -359,23 +359,34 @@ fun LibraryScreen(
                 }
 
                 // Full-Width Single-Line iOS Glass Search Bar
-                val searchBg = if (isDark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.76f)
-                val searchBorder = if (isDark) Color.White.copy(alpha = 0.25f) else Color.White
+                val searchBg = if (isDark) Color(0xFF1A2942).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.82f)
+                val searchBorder = if (isDark) Color.White.copy(alpha = 0.36f) else Color.White
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
                     placeholder = {
                         Text(
-                            text = "Search PDFs...",
+                            text = "Search PDFs, OCR text & tags...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                Icon(
+                                    Icons.Default.Clear,
+                                    contentDescription = "Clear",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     },
@@ -384,6 +395,9 @@ fun LibraryScreen(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = searchBg,
                         unfocusedContainerColor = searchBg,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        cursorColor = MaterialTheme.colorScheme.primary,
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = searchBorder
                     ),
@@ -534,16 +548,15 @@ fun LibraryScreen(
                 }
             }
 
-            // Floating Action Button to launch Camera Scanner cleanly above the floating LiquidGlassBottomBar
-            ExtendedFloatingActionButton(
+            // 3D Glowing RGB Floating Camera Button above the LiquidGlassBottomBar
+            com.example.ui.theme.Glowing3dRgbCameraOrb(
                 onClick = {
-                    haptics.click()
                     onLaunchScanner(ScannerCaptureMode.STANDARD_BATCH)
                 },
-                icon = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
-                text = { Text("Scan", fontWeight = FontWeight.Bold) },
-                containerColor = RoyalBlue,
-                contentColor = Color.White,
+                size = 60.dp,
+                iconSize = 27.dp,
+                icon = Icons.Default.CameraAlt,
+                contentDescription = "Scan Document",
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()

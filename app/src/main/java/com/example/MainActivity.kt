@@ -473,6 +473,12 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                             activeTabIndex.toFloat()
                         }
                     },
+                    onCenterCameraClick = {
+                        if (activeTabIndex != 1) {
+                            viewModel.startNewScanSession(ScannerCaptureMode.STANDARD_BATCH)
+                        }
+                        switchToPagerTab(1)
+                    },
                     tabs = listOf(
                         LiquidGlassNavTab(
                             label = "Library",

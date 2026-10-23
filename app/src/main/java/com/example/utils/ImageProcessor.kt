@@ -750,5 +750,182 @@ object ImageProcessor {
         out.setPixels(pixels, 0, w, 0, 0, w, h)
         return out
     }
+
+    /**
+     * Generates a high-resolution transparent Bitmap of an official double-bordered rubber stamp
+     * (e.g., APPROVED, PAID, CONFIDENTIAL, URGENT, VOID, or custom text) with optional date line.
+     */
+    fun createOfficialStampBitmap(
+        stampText: String,
+        subText: String = "",
+        inkColor: Int = Color.rgb(210, 32, 48)
+    ): Bitmap {
+        val cleanMain = stampText.trim().uppercase().ifBlank { "APPROVED" }
+        val cleanSub = subText.trim().uppercase()
+        val w = 760
+        val h = if (cleanSub.isNotBlank()) 280 else 220
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+
+        val outerRect = RectF(18f, 18f, w - 18f, h - 18f)
+        val innerRect = RectF(32f, 32f, w - 32f, h - 32f)
+
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(
+                28,
+                Color.red(inkColor),
+                Color.green(inkColor),
+                Color.blue(inkColor)
+            )
+            style = Paint.Style.FILL
+        }
+        val outerBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = inkColor
+            style = Paint.Style.STROKE
+            strokeWidth = 10f
+        }
+        val innerBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = inkColor
+            style = Paint.Style.STROKE
+            strokeWidth = 3.5f
+        }
+
+        canvas.drawRoundRect(outerRect, 24f, 24f, fillPaint)
+        canvas.drawRoundRect(outerRect, 24f, 24f, outerBorderPaint)
+        canvas.drawRoundRect(innerRect, 16f, 16f, innerBorderPaint)
+
+        val maxTextWidth = w - 110f
+        var mainTextSize = 78f
+        val mainPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = inkColor
+            isFakeBoldText = true
+            textAlign = Paint.Align.CENTER
+            letterSpacing = 0.08f
+            textSize = mainTextSize
+        }
+        while (mainPaint.measureText(cleanMain) > maxTextWidth && mainTextSize > 34f) {
+            mainTextSize -= 4f
+            mainPaint.textSize = mainTextSize
+        }
+
+        if (cleanSub.isBlank()) {
+            val textY = h / 2f - (mainPaint.descent() + mainPaint.ascent()) / 2f
+            canvas.drawText(cleanMain, w / 2f, textY, mainPaint)
+        } else {
+            val mainY = h * 0.48f - (mainPaint.descent() + mainPaint.ascent()) / 2f - 8f
+            canvas.drawText(cleanMain, w / 2f, mainY, mainPaint)
+
+            val divY = h * 0.64f
+            canvas.drawLine(56f, divY, w - 56f, divY, innerBorderPaint)
+
+            val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = inkColor
+                isFakeBoldText = true
+                textAlign = Paint.Align.CENTER
+                letterSpacing = 0.06f
+                textSize = 30f
+            }
+            val subY = h * 0.80f - (subPaint.descent() + subPaint.ascent()) / 2f
+            canvas.drawText(cleanSub, w / 2f, subY, subPaint)
+        }
+
+        return bmp
+    }
+
+    /**
+     * Renders a multi-page formatted document from typed or pasted text notes so users can
+     * create clean, searchable PDFs directly from text/notes.
+     */
+    fun renderTextNotePagesToBitmaps(
+        title: String,
+        bodyText: String,
+        includeRuledLines: Boolean = false
+    ): List<Bitmap> {
+        val pageW = 1240
+        val pageH = 1754
+        val marginX = 96f
+        val maxLineW = pageW - marginX * 2f
+
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(10, 22, 46)
+            textSize = 46f
+            isFakeBoldText = true
+        }
+        val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(71, 85, 105)
+            textSize = 24f
+        }
+        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(15, 23, 42)
+            textSize = 30f
+        }
+        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 2f
+        }
+        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(10, 132, 255)
+            style = Paint.Style.FILL
+        }
+
+        // Word-wrap paragraphs into lines
+        val wrappedLines = mutableListOf<String>()
+        val rawParagraphs = bodyText.ifBlank { "(Empty note)" }.split("\n")
+        for (para in rawParagraphs) {
+            if (para.isBlank()) {
+                wrappedLines.add("")
+                continue
+            }
+            val words = para.split(" ")
+            var currentLine = StringBuilder()
+            for (word in words) {
+                val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+                if (bodyPaint.measureText(testLine) <= maxLineW) {
+                    currentLine = StringBuilder(testLine)
+                } else {
+                    if (currentLine.isNotEmpty()) {
+                        wrappedLines.add(currentLine.toString())
+                    }
+                    currentLine = StringBuilder(word)
+                }
+            }
+            if (currentLine.isNotEmpty()) {
+                wrappedLines.add(currentLine.toString())
+            }
+        }
+
+        val lineHeight = 46f
+        val linesPerPage = 28
+        val chunks = wrappedLines.chunked(linesPerPage).ifEmpty { listOf(emptyList()) }
+        val dateStr = java.text.SimpleDateFormat("MMM d, yyyy • h:mm a", java.util.Locale.getDefault())
+            .format(java.util.Date())
+
+        return chunks.mapIndexed { pageIdx, pageLines ->
+            val bmp = Bitmap.createBitmap(pageW, pageH, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            canvas.drawColor(Color.WHITE)
+
+            // Header bar
+            canvas.drawRect(marginX, 72f, pageW - marginX, 82f, accentPaint)
+            val displayTitle = title.ifBlank { "Document Note" }
+            canvas.drawText(displayTitle.take(45), marginX, 142f, titlePaint)
+            canvas.drawText("Generated with Doc Scan • $dateStr • Page ${pageIdx + 1} of ${chunks.size}", marginX, 184f, metaPaint)
+            canvas.drawLine(marginX, 210f, pageW - marginX, 210f, linePaint)
+
+            var y = 276f
+            for (i in 0 until linesPerPage) {
+                if (includeRuledLines) {
+                    canvas.drawLine(marginX, y + 10f, pageW - marginX, y + 10f, linePaint)
+                }
+                val lineText = pageLines.getOrNull(i)
+                if (!lineText.isNullOrEmpty()) {
+                    canvas.drawText(lineText, marginX, y, bodyPaint)
+                }
+                y += lineHeight
+            }
+            bmp
+        }
+    }
 }
+
 

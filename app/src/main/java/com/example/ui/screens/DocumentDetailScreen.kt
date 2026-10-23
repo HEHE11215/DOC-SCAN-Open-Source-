@@ -18,6 +18,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,6 +43,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.RotateRight
+import android.speech.tts.TextToSpeech
+import androidx.compose.material.icons.filled.Approval
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Contrast
@@ -55,8 +60,10 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -70,6 +77,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -77,6 +85,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -154,10 +163,54 @@ fun DocumentDetailScreen(
 
     var showWatermarkDialog by remember { mutableStateOf(false) }
     var showSignatureDialog by remember { mutableStateOf(false) }
+    var showStampDialog by remember { mutableStateOf(false) }
     var showPasswordManageDialog by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
 
     var editableOcrText by remember(doc?.ocrText) { mutableStateOf(doc?.ocrText ?: "") }
+
+    // Android Text-To-Speech (Read Aloud) Engine
+    var isSpeaking by remember { mutableStateOf(false) }
+    var speechRate by remember { mutableFloatStateOf(1.0f) }
+    var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+
+    DisposableEffect(context) {
+        var engine: TextToSpeech? = null
+        engine = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                engine?.language = java.util.Locale.getDefault()
+            }
+        }
+        ttsEngine = engine
+        onDispose {
+            runCatching {
+                engine?.stop()
+                engine?.shutdown()
+            }
+        }
+    }
+
+    fun toggleReadAloud() {
+        val engine = ttsEngine ?: return
+        if (isSpeaking) {
+            engine.stop()
+            isSpeaking = false
+            viewModel.showStatus("Stopped voice reader")
+        } else {
+            val textToRead = editableOcrText.ifBlank {
+                doc?.ocrText?.ifBlank { "" } ?: ""
+            }
+            if (textToRead.isBlank()) {
+                viewModel.showStatus("No OCR text yet. Tap 'Scan OCR' first to read aloud.")
+                selectedTab = 1
+                return
+            }
+            engine.setSpeechRate(speechRate)
+            engine.speak(textToRead.take(3900), TextToSpeech.QUEUE_FLUSH, null, "doc_tts_${doc?.id}")
+            isSpeaking = true
+            viewModel.showStatus("Reading document aloud (${speechRate}x)...")
+        }
+    }
 
     val savePdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
@@ -353,6 +406,9 @@ fun DocumentDetailScreen(
                         doc = currentDoc,
                         pages = pages,
                         viewModel = viewModel,
+                        isSpeaking = isSpeaking,
+                        onToggleReadAloud = { toggleReadAloud() },
+                        onOpenStampDialog = { showStampDialog = true },
                         onOpenWatermarkDialog = { showWatermarkDialog = true },
                         onOpenSignatureDialog = { showSignatureDialog = true },
                         onOpenPasswordDialog = { showPasswordManageDialog = true },
@@ -362,6 +418,13 @@ fun DocumentDetailScreen(
                     1 -> OcrTextDetailTab(
                         doc = currentDoc,
                         editableText = editableOcrText,
+                        isSpeaking = isSpeaking,
+                        speechRate = speechRate,
+                        onSpeechRateChange = { newRate ->
+                            speechRate = newRate
+                            ttsEngine?.setSpeechRate(newRate)
+                        },
+                        onToggleReadAloud = { toggleReadAloud() },
                         onTextChange = { editableOcrText = it },
                         onRunOcrAllPages = {
                             scope.launch {
@@ -411,6 +474,10 @@ fun DocumentDetailScreen(
                         },
                         onSaveTxtSaf = {
                             saveTxtLauncher.launch("${currentDoc.title.replace(" ", "_")}.txt")
+                        },
+                        onCopyEntity = { kind, entityText ->
+                            clipboard.setText(AnnotatedString(entityText))
+                            viewModel.showStatus("Copied $kind: \"$entityText\"")
                         }
                     )
                 }
@@ -429,6 +496,26 @@ fun DocumentDetailScreen(
                     watermarkText = watermark,
                     pageNumberFormat = format,
                     pageNumberPosition = pos
+                )
+            }
+        )
+    }
+
+    if (showStampDialog) {
+        OfficialStampDialog(
+            pageCount = pages.size.coerceAtLeast(1),
+            onDismiss = { showStampDialog = false },
+            onStampImposed = { stampText, subText, inkColor, targetPageIdx, normX, normY, scale ->
+                showStampDialog = false
+                viewModel.applyOfficialStampToDocument(
+                    docId = currentDoc.id,
+                    stampText = stampText,
+                    subText = subText,
+                    inkColor = inkColor,
+                    pageIndex = targetPageIdx,
+                    normX = normX,
+                    normY = normY,
+                    scale = scale
                 )
             }
         )
@@ -485,6 +572,9 @@ private fun PdfPagesViewerTab(
     doc: com.example.data.local.ScannedDocumentEntity,
     pages: List<ScannedPageEntity>,
     viewModel: DocuScanViewModel,
+    isSpeaking: Boolean,
+    onToggleReadAloud: () -> Unit,
+    onOpenStampDialog: () -> Unit,
     onOpenWatermarkDialog: () -> Unit,
     onOpenSignatureDialog: () -> Unit,
     onOpenPasswordDialog: () -> Unit,
@@ -542,6 +632,24 @@ private fun PdfPagesViewerTab(
                 label = { Text("Sign PDF") },
                 leadingIcon = { Icon(Icons.Default.Draw, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 modifier = Modifier.testTag("doc_sign_button")
+            )
+            AssistChip(
+                onClick = onOpenStampDialog,
+                label = { Text("Stamp PDF") },
+                leadingIcon = { Icon(Icons.Default.Approval, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.testTag("doc_stamp_button")
+            )
+            AssistChip(
+                onClick = onToggleReadAloud,
+                label = { Text(if (isSpeaking) "Stop Audio" else "Read Aloud") },
+                leadingIcon = {
+                    Icon(
+                        if (isSpeaking) Icons.Default.StopCircle else Icons.Default.RecordVoiceOver,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                modifier = Modifier.testTag("doc_read_aloud_button")
             )
             AssistChip(
                 onClick = onOpenWatermarkDialog,
@@ -709,17 +817,47 @@ private fun PdfPagesViewerTab(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OcrTextDetailTab(
     doc: com.example.data.local.ScannedDocumentEntity,
     editableText: String,
+    isSpeaking: Boolean,
+    speechRate: Float,
+    onSpeechRateChange: (Float) -> Unit,
+    onToggleReadAloud: () -> Unit,
     onTextChange: (String) -> Unit,
     onRunOcrAllPages: () -> Unit,
     onSaveText: () -> Unit,
     onCopyText: () -> Unit,
+    onCopyEntity: (String, String) -> Unit,
     onShareTxt: () -> Unit,
     onSaveTxtSaf: () -> Unit
 ) {
+    // Smart Document Insights & Entity Extraction
+    val wordCount = remember(editableText) {
+        if (editableText.isBlank()) 0 else editableText.trim().split(Regex("\\s+")).size
+    }
+    val charCount = remember(editableText) { editableText.length }
+    val readingTimeMin = remember(wordCount) { (wordCount / 180f).coerceAtLeast(if (wordCount > 0) 0.5f else 0f) }
+
+    val extractedEntities = remember(editableText) {
+        if (editableText.isBlank()) emptyList()
+        else {
+            val results = mutableListOf<Pair<String, String>>()
+            Regex("(?:\\$|€|£|₹|USD|EUR)\\s?\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?").findAll(editableText).take(3).forEach {
+                results.add("Amount" to it.value.trim())
+            }
+            Regex("\\b(?:\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})\\b").findAll(editableText).take(2).forEach {
+                results.add("Date" to it.value.trim())
+            }
+            Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}").findAll(editableText).take(2).forEach {
+                results.add("Email" to it.value.trim())
+            }
+            results.distinctBy { it.second }.take(6)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -753,12 +891,22 @@ private fun OcrTextDetailTab(
                             .testTag("ocr_detail_run_button")
                     )
                     GlassActionButton(
+                        text = if (isSpeaking) "Stop Voice" else "Read Aloud",
+                        icon = if (isSpeaking) Icons.Default.StopCircle else Icons.Default.RecordVoiceOver,
+                        isPrimary = isSpeaking,
+                        height = 40.dp,
+                        onClick = onToggleReadAloud,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("ocr_read_aloud_button")
+                    )
+                    GlassActionButton(
                         text = "Copy",
                         icon = Icons.Default.ContentCopy,
                         height = 40.dp,
                         onClick = onCopyText,
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.85f)
                             .testTag("ocr_copy_button")
                     )
                 }
@@ -770,7 +918,7 @@ private fun OcrTextDetailTab(
                     GlassActionButton(
                         text = "Share TXT",
                         icon = Icons.Default.Share,
-                        height = 40.dp,
+                        height = 38.dp,
                         onClick = onShareTxt,
                         modifier = Modifier
                             .weight(1f)
@@ -779,12 +927,76 @@ private fun OcrTextDetailTab(
                     GlassActionButton(
                         text = "Export",
                         icon = Icons.Default.Download,
-                        height = 40.dp,
+                        height = 38.dp,
                         onClick = onSaveTxtSaf,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("ocr_export_txt_button")
                     )
+                    // Voice Speed Selector Pill
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(0.75f to "0.75x", 1.0f to "1x", 1.25f to "1.25x", 1.5f to "1.5x").forEach { (rate, label) ->
+                            val selected = kotlin.math.abs(speechRate - rate) < 0.05f
+                            Surface(
+                                onClick = { onSpeechRateChange(rate) },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Smart Document Insights & Extracted Entities Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    ) {
+                        Text(
+                            text = "$wordCount words • $charCount chars • ${if (readingTimeMin < 1f && wordCount > 0) "<1 min" else "${readingTimeMin.toInt()} min"} read",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                    extractedEntities.forEach { (kind, value) ->
+                        AssistChip(
+                            onClick = { onCopyEntity(kind, value) },
+                            label = {
+                                Text(
+                                    text = "$kind: $value",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = kind,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -792,9 +1004,29 @@ private fun OcrTextDetailTab(
         OutlinedTextField(
             value = editableText,
             onValueChange = onTextChange,
-            label = { Text("OCR Text (${doc.title})") },
-            placeholder = { Text("No OCR text extracted yet. Tap 'Scan OCR' above to extract text from all pages.") },
-            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            label = {
+                Text(
+                    "OCR Text (${doc.title})",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            placeholder = {
+                Text(
+                    "No OCR text extracted yet. Tap 'Scan OCR' above to extract text from all pages.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                cursorColor = MaterialTheme.colorScheme.primary,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+            ),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1410,3 +1642,289 @@ fun CompressPdfDialog(
         }
     )
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun OfficialStampDialog(
+    onDismiss: () -> Unit,
+    pagePreviewBitmap: Bitmap? = null,
+    pageCount: Int = 1,
+    initialPageIndex: Int = -1,
+    onStampImposed: (stampText: String, subText: String, colorArgb: Int, targetPageIndex: Int, normX: Float, normY: Float, scale: Float) -> Unit
+) {
+    val todayDate = remember {
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+    }
+    val presets = remember {
+        listOf(
+            Triple("APPROVED", AndroidColor.rgb(16, 142, 72), "DATE: $todayDate"),
+            Triple("PAID", AndroidColor.rgb(14, 116, 204), "PAID ON $todayDate"),
+            Triple("CONFIDENTIAL", AndroidColor.rgb(200, 30, 45), "DO NOT DISTRIBUTE"),
+            Triple("URGENT", AndroidColor.rgb(217, 70, 15), "PRIORITY ACTION"),
+            Triple("FINAL", AndroidColor.rgb(99, 60, 212), "VERIFIED $todayDate"),
+            Triple("VOID", AndroidColor.rgb(190, 24, 24), "CANCELLED $todayDate")
+        )
+    }
+
+    var stampText by remember { mutableStateOf("APPROVED") }
+    var subText by remember { mutableStateOf("DATE: $todayDate") }
+    var selectedColor by remember { mutableIntStateOf(AndroidColor.rgb(16, 142, 72)) }
+    var stampNormX by remember { mutableFloatStateOf(0.58f) }
+    var stampNormY by remember { mutableFloatStateOf(0.14f) }
+    var stampScale by remember { mutableFloatStateOf(0.36f) }
+    var targetPageIndex by remember { mutableIntStateOf(initialPageIndex) }
+
+    val liveStampPreviewBitmap = remember(stampText, subText, selectedColor) {
+        ImageProcessor.createOfficialStampBitmap(
+            stampText = stampText.ifBlank { "APPROVED" },
+            subText = subText,
+            inkColor = selectedColor
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Official Rubber Stamp Maker",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "1. Choose Preset or Customize Stamp:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presets.forEach { (label, col, defaultSub) ->
+                        FilterChip(
+                            selected = stampText.equals(label, ignoreCase = true),
+                            onClick = {
+                                stampText = label
+                                selectedColor = col
+                                subText = defaultSub
+                            },
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = stampText,
+                    onValueChange = { stampText = it.take(18) },
+                    label = { Text("Main Stamp Banner") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = subText,
+                    onValueChange = { subText = it.take(28) },
+                    label = { Text("Sub-banner (Date / Department)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Ink Color Picker
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Ink Color:", style = MaterialTheme.typography.labelMedium)
+                    listOf(
+                        AndroidColor.rgb(16, 142, 72),
+                        AndroidColor.rgb(200, 30, 45),
+                        AndroidColor.rgb(14, 116, 204),
+                        AndroidColor.rgb(217, 70, 15),
+                        AndroidColor.rgb(99, 60, 212)
+                    ).forEach { col ->
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(col),
+                            modifier = Modifier
+                                .size(28.dp)
+                                .border(
+                                    width = if (selectedColor == col) 2.5.dp else 0.dp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    shape = CircleShape
+                                ),
+                            onClick = { selectedColor = col }
+                        ) {}
+                    }
+                }
+
+                Text(
+                    text = "2. Drag Stamp on Page Preview:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(175.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFE2E8F0))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                        .pointerInput(stampScale) {
+                            detectTapGestures { tap ->
+                                val w = size.width.toFloat().coerceAtLeast(1f)
+                                val h = size.height.toFloat().coerceAtLeast(1f)
+                                val boxW = w * stampScale
+                                val boxH = boxW * 0.42f
+                                val maxL = (w - boxW).coerceAtLeast(1f)
+                                val maxT = (h - boxH).coerceAtLeast(1f)
+                                stampNormX = ((tap.x - boxW / 2f) / maxL).coerceIn(0f, 1f)
+                                stampNormY = ((tap.y - boxH / 2f) / maxT).coerceIn(0f, 1f)
+                            }
+                        }
+                        .pointerInput(stampScale) {
+                            detectDragGestures { change, _ ->
+                                change.consume()
+                                val w = size.width.toFloat().coerceAtLeast(1f)
+                                val h = size.height.toFloat().coerceAtLeast(1f)
+                                val boxW = w * stampScale
+                                val boxH = boxW * 0.42f
+                                val maxL = (w - boxW).coerceAtLeast(1f)
+                                val maxT = (h - boxH).coerceAtLeast(1f)
+                                stampNormX = ((change.position.x - boxW / 2f) / maxL).coerceIn(0f, 1f)
+                                stampNormY = ((change.position.y - boxH / 2f) / maxT).coerceIn(0f, 1f)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (pagePreviewBitmap != null) {
+                        Image(
+                            bitmap = pagePreviewBitmap.asImageBitmap(),
+                            contentDescription = "Stamp Imposition Preview",
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(6.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White)
+                        )
+                    } else {
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(6.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White)
+                        ) {
+                            val pw = size.width
+                            val ph = size.height
+                            for (lineIdx in 1..6) {
+                                val ly = ph * (0.12f * lineIdx)
+                                drawLine(
+                                    color = Color(0xFFE2E8F0),
+                                    start = Offset(pw * 0.1f, ly),
+                                    end = Offset(pw * 0.9f, ly),
+                                    strokeWidth = 4f
+                                )
+                            }
+                        }
+                    }
+
+                    // Live Stamp Preview Box
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(6.dp)
+                    ) {
+                        val boxW = maxWidth * stampScale
+                        val boxH = boxW * 0.42f
+                        val maxL = (maxWidth - boxW).coerceAtLeast(1.dp)
+                        val maxT = (maxHeight - boxH).coerceAtLeast(1.dp)
+                        Image(
+                            bitmap = liveStampPreviewBitmap.asImageBitmap(),
+                            contentDescription = "Stamp Preview",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .size(width = boxW, height = boxH)
+                                .offset(
+                                    x = maxL * stampNormX.coerceIn(0f, 1f),
+                                    y = maxT * stampNormY.coerceIn(0f, 1f)
+                                )
+                        )
+                    }
+                }
+
+                // Size slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Size: ${(stampScale * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.width(68.dp)
+                    )
+                    Slider(
+                        value = stampScale,
+                        onValueChange = { stampScale = it },
+                        valueRange = 0.22f..0.58f,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (pageCount > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = targetPageIndex == -1,
+                            onClick = { targetPageIndex = -1 },
+                            label = { Text("All Pages") }
+                        )
+                        for (idx in 0 until pageCount) {
+                            FilterChip(
+                                selected = targetPageIndex == idx,
+                                onClick = { targetPageIndex = idx },
+                                label = { Text("Page ${idx + 1}") }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onStampImposed(
+                        stampText.ifBlank { "APPROVED" },
+                        subText,
+                        selectedColor,
+                        targetPageIndex,
+                        stampNormX,
+                        stampNormY,
+                        stampScale
+                    )
+                },
+                modifier = Modifier.testTag("confirm_impose_stamp_button")
+            ) {
+                Text("Stamp PDF")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+

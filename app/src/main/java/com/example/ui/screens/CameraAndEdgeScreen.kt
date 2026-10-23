@@ -101,6 +101,7 @@ import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.FrostedGlassCard
 import com.example.ui.theme.GlassActionButton
 import com.example.ui.theme.GlassScreenBackground
+import com.example.ui.theme.Glowing3dRgbCameraOrb
 import com.example.ui.theme.LuminousCyan
 import com.example.ui.theme.RoyalBlue
 import com.example.ui.viewmodel.DocuScanViewModel
@@ -595,43 +596,35 @@ private fun CameraCaptureView(
                         .testTag("camera_gallery_button")
                 )
 
-                Box(
-                    modifier = Modifier
-                        .size(62.dp)
-                        .clip(CircleShape)
-                        .background(RoyalBlue)
-                        .clickable {
-                            if (hasCameraPermission) {
-                                imageCapture.takePicture(
-                                    ContextCompat.getMainExecutor(context),
-                                    object : ImageCapture.OnImageCapturedCallback() {
-                                        override fun onCaptureSuccess(image: ImageProxy) {
-                                            val bmp = image.toBitmap()
-                                            val rot = image.imageInfo.rotationDegrees
-                                            image.close()
-                                            val oriented = ImageProcessor.rotateBitmap(bmp, rot)
-                                            onBitmapCaptured(oriented)
-                                        }
-
-                                        override fun onError(exception: ImageCaptureException) {
-                                            onUseSampleDemoPage()
-                                        }
+                Glowing3dRgbCameraOrb(
+                    onClick = {
+                        if (hasCameraPermission) {
+                            imageCapture.takePicture(
+                                ContextCompat.getMainExecutor(context),
+                                object : ImageCapture.OnImageCapturedCallback() {
+                                    override fun onCaptureSuccess(image: ImageProxy) {
+                                        val bmp = image.toBitmap()
+                                        val rot = image.imageInfo.rotationDegrees
+                                        image.close()
+                                        val oriented = ImageProcessor.rotateBitmap(bmp, rot)
+                                        onBitmapCaptured(oriented)
                                     }
-                                )
-                            } else {
-                                onUseSampleDemoPage()
-                            }
+
+                                    override fun onError(exception: ImageCaptureException) {
+                                        onUseSampleDemoPage()
+                                    }
+                                }
+                            )
+                        } else {
+                            onUseSampleDemoPage()
                         }
-                        .testTag("camera_shutter_button"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Camera,
-                        contentDescription = "Capture Scan",
-                        tint = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
+                    },
+                    size = 66.dp,
+                    iconSize = 30.dp,
+                    icon = Icons.Default.Camera,
+                    contentDescription = "Capture Scan",
+                    modifier = Modifier.testTag("camera_shutter_button")
+                )
 
                 if (capturedPageCount > 0) {
                     GlassActionButton(

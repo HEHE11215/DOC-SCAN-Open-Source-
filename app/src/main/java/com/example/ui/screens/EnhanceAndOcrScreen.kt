@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.Approval
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Delete
@@ -120,6 +121,7 @@ fun EnhanceAndOcrScreen(
     var showAdjustSliders by remember { mutableStateOf(false) }
     var showSavePdfDialog by remember { mutableStateOf(false) }
     var showSignatureDialog by remember { mutableStateOf(false) }
+    var showStampDialog by remember { mutableStateOf(false) }
     var showScriptMenu by remember { mutableStateOf(false) }
     var highlightedBlockText by remember { mutableStateOf<String?>(null) }
 
@@ -367,6 +369,7 @@ fun EnhanceAndOcrScreen(
                         viewModel.applyFilterAndAdjustmentsToActivePage(autoDeskew = true)
                     },
                     onOpenSignDialog = { showSignatureDialog = true },
+                    onOpenStampDialog = { showStampDialog = true },
                     onDeletePage = { viewModel.deleteActiveDraftPage() }
                 )
             } else {
@@ -442,6 +445,33 @@ fun EnhanceAndOcrScreen(
         )
     }
 
+    if (showStampDialog) {
+        OfficialStampDialog(
+            onDismiss = { showStampDialog = false },
+            pagePreviewBitmap = activePage.enhancedBitmap,
+            pageCount = session.pages.size.coerceAtLeast(1),
+            initialPageIndex = session.activePageIndex,
+            onStampImposed = { stampText, subText, colorArgb, targetPageIdx, normX, normY, scale ->
+                showStampDialog = false
+                if (targetPageIdx >= 0 && targetPageIdx != session.activePageIndex) {
+                    viewModel.selectActiveDraftPage(targetPageIdx)
+                }
+                val stampBmp = com.example.utils.ImageProcessor.createOfficialStampBitmap(
+                    stampText = stampText,
+                    subText = subText,
+                    inkColor = colorArgb
+                )
+                viewModel.imposeSignatureOnActiveDraftPage(
+                    signatureBitmap = stampBmp,
+                    normX = normX,
+                    normY = normY,
+                    scale = scale,
+                    applyToAllPages = (targetPageIdx == -1)
+                )
+            }
+        )
+    }
+
     if (showSavePdfDialog) {
         SavePdfOptionsDialog(
             defaultPageSize = settings.defaultPageSize,
@@ -481,6 +511,7 @@ private fun EnhanceControlsPanel(
     onRotate90: () -> Unit,
     onDeskew: () -> Unit,
     onOpenSignDialog: () -> Unit,
+    onOpenStampDialog: () -> Unit,
     onDeletePage: () -> Unit
 ) {
     val haptics = LocalHaptics.current
@@ -614,6 +645,15 @@ private fun EnhanceControlsPanel(
                     modifier = Modifier
                         .weight(1f)
                         .testTag("enhance_sign_page_button")
+                )
+                GlassActionButton(
+                    text = "Stamp",
+                    icon = Icons.Default.Approval,
+                    height = 40.dp,
+                    onClick = onOpenStampDialog,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("enhance_stamp_page_button")
                 )
                 GlassActionButton(
                     text = "Tune",

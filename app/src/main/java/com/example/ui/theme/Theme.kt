@@ -30,11 +30,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
@@ -52,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -78,43 +79,58 @@ val LocalIsDarkGlass = compositionLocalOf { false }
 val LocalHasRootGlassBackground = compositionLocalOf { false }
 
 private val DarkColorScheme = darkColorScheme(
-    primary = LuminousCyan,
-    onPrimary = Color(0xFF041020),
-    primaryContainer = Color(0xFF122B4A),
-    onPrimaryContainer = Color(0xFFE0F2FE),
-    secondary = ElectricTeal,
+    primary = ElectricTeal,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF173A6A),
+    onPrimaryContainer = Color.White,
+    secondary = LuminousCyan,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFF152C4A),
-    onSecondaryContainer = Color(0xFFD8F0FF),
+    secondaryContainer = Color(0xFF1E3A5F),
+    onSecondaryContainer = Color.White,
     tertiary = IndigoAccent,
     onTertiary = Color.White,
+    tertiaryContainer = Color(0xFF2B2868),
+    onTertiaryContainer = Color.White,
     background = DarkBackground,
-    onBackground = DarkOnSurface,
+    onBackground = Color.White,
     surface = DarkSurface,
-    onSurface = DarkOnSurface,
+    onSurface = Color.White,
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkOnSurfaceVariant,
-    error = CrimsonError
+    surfaceContainerLowest = Color(0xFF070D19),
+    surfaceContainerLow = Color(0xFF0F1829),
+    surfaceContainer = Color(0xFF152238),
+    surfaceContainerHigh = Color(0xFF1C2D48),
+    surfaceContainerHighest = Color(0xFF253B5E),
+    outline = Color(0xFF94A3B8),
+    outlineVariant = Color(0xFF475569),
+    error = CrimsonError,
+    onError = Color.White
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = RoyalBlue,
     onPrimary = Color.White,
     primaryContainer = Color(0xFFD8EAFF),
-    onPrimaryContainer = Color(0xFF003B8E),
+    onPrimaryContainer = Color(0xFF002D6E),
     secondary = ElectricTeal,
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFE0F2FE),
-    onSecondaryContainer = Color(0xFF0369A1),
+    onSecondaryContainer = Color(0xFF075985),
     tertiary = IndigoAccent,
     onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE0E7FF),
+    onTertiaryContainer = Color(0xFF1E1B4B),
     background = LightBackground,
     onBackground = LightOnSurface,
     surface = LightSurface,
     onSurface = LightOnSurface,
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightOnSurfaceVariant,
-    error = CrimsonError
+    outline = Color(0xFF64748B),
+    outlineVariant = Color(0xFFCBD5E1),
+    error = CrimsonError,
+    onError = Color.White
 )
 
 val AppShapes = Shapes(
@@ -150,32 +166,39 @@ fun DocuScanTheme(
 
     CompositionLocalProvider(
         LocalIsDarkGlass provides darkTheme,
-        LocalHaptics provides haptics
+        LocalHaptics provides haptics,
+        LocalContentColor provides colorScheme.onSurface
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
-            shapes = AppShapes,
-            content = content
-        )
+            shapes = AppShapes
+        ) {
+            CompositionLocalProvider(LocalContentColor provides colorScheme.onSurface) {
+                content()
+            }
+        }
     }
 }
 
 /**
- * Authentic iPhone iOS 18 / visionOS Ambient Mesh Background with cached GPU shaders
- * and automatic root deduplication so nested screens never double-draw full-screen gradients.
+ * Authentic iPhone iOS 18 / visionOS Ambient Mesh Background with cached GPU shaders,
+ * automatic root deduplication, and explicit high-contrast LocalContentColor propagation.
  */
 @Composable
 fun GlassScreenBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val contentColor = MaterialTheme.colorScheme.onSurface
     val alreadyHasRootBg = LocalHasRootGlassBackground.current
     if (alreadyHasRootBg) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            content = content
-        )
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
+            Box(
+                modifier = modifier.fillMaxSize(),
+                content = content
+            )
+        }
         return
     }
 
@@ -197,7 +220,10 @@ fun GlassScreenBackground(
         label = "glassBottomBg"
     )
 
-    CompositionLocalProvider(LocalHasRootGlassBackground provides true) {
+    CompositionLocalProvider(
+        LocalHasRootGlassBackground provides true,
+        LocalContentColor provides contentColor
+    ) {
         Box(
             modifier = modifier
                 .fillMaxSize()
@@ -240,8 +266,8 @@ fun GlassScreenBackground(
 }
 
 /**
- * Smooth iPhone iOS Frosted Glass Card with cached brushes and single-pass GPU drawing
- * for zero-jank scrolling in LazyColumn / LazyVerticalGrid.
+ * Smooth iPhone iOS Frosted Glass Card with cached brushes, single-pass GPU drawing,
+ * and guaranteed high-contrast LocalContentColor in both Light and Dark mode.
  */
 @Composable
 fun FrostedGlassCard(
@@ -252,6 +278,7 @@ fun FrostedGlassCard(
 ) {
     val isDark = LocalIsDarkGlass.current
     val haptics = LocalHaptics.current
+    val contentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
 
     val cardModifier = modifier
@@ -263,38 +290,38 @@ fun FrostedGlassCard(
             val fillBrush = if (isDark) {
                 Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.14f),
-                        Color(0xFF1E293B).copy(alpha = 0.50f),
-                        Color(0xFF0F172A).copy(alpha = 0.62f)
+                        Color(0xFF1E2D4A).copy(alpha = 0.78f),
+                        Color(0xFF152238).copy(alpha = 0.82f),
+                        Color(0xFF0F172A).copy(alpha = 0.88f)
                     )
                 )
             } else {
                 Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.78f),
-                        Color.White.copy(alpha = 0.56f),
-                        Color(0xFFF0F7FF).copy(alpha = 0.68f)
+                        Color.White.copy(alpha = 0.82f),
+                        Color.White.copy(alpha = 0.64f),
+                        Color(0xFFF0F7FF).copy(alpha = 0.74f)
                     )
                 )
             }
             val borderBrush = if (isDark) {
                 Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.34f),
-                        Color.White.copy(alpha = 0.10f),
-                        Color(0xFF38BDF8).copy(alpha = 0.18f)
+                        Color.White.copy(alpha = 0.42f),
+                        Color.White.copy(alpha = 0.16f),
+                        LuminousCyan.copy(alpha = 0.28f)
                     )
                 )
             } else {
                 Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.95f),
-                        Color.White.copy(alpha = 0.48f),
-                        Color.White.copy(alpha = 0.85f)
+                        Color.White.copy(alpha = 0.96f),
+                        Color.White.copy(alpha = 0.55f),
+                        Color.White.copy(alpha = 0.88f)
                     )
                 )
             }
-            val topGlintColor = if (isDark) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.88f)
+            val topGlintColor = if (isDark) Color.White.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.90f)
 
             onDrawWithContent {
                 drawRoundRect(brush = fillBrush, cornerRadius = corner)
@@ -323,13 +350,15 @@ fun FrostedGlassCard(
             }
         )
 
-    Box(modifier = cardModifier) {
-        content()
+    CompositionLocalProvider(LocalContentColor provides contentColor) {
+        Box(modifier = cardModifier) {
+            content()
+        }
     }
 }
 
 /**
- * Adaptive, strictly aligned iOS Frosted Glass Action Button with cached brushes and tactile haptics.
+ * Adaptive, strictly aligned iOS Frosted Glass Action Button with high-contrast text in Night & Light mode.
  */
 @Composable
 fun GlassActionButton(
@@ -362,6 +391,7 @@ fun GlassActionButton(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
+                    tint = Color.White,
                     modifier = Modifier.size(17.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
@@ -369,12 +399,15 @@ fun GlassActionButton(
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
     } else {
+        val labelColor = if (isDark) Color.White else LightOnSurface
+        val iconColor = if (isDark) LuminousCyan else RoyalBlue
         Box(
             modifier = modifier
                 .height(height)
@@ -384,30 +417,30 @@ fun GlassActionButton(
                     val fillBrush = if (isDark) {
                         Brush.linearGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.16f),
-                                Color.White.copy(alpha = 0.08f)
+                                Color(0xFF243B61).copy(alpha = 0.85f),
+                                Color(0xFF172742).copy(alpha = 0.90f)
                             )
                         )
                     } else {
                         Brush.linearGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.85f),
-                                Color.White.copy(alpha = 0.60f)
+                                Color.White.copy(alpha = 0.90f),
+                                Color(0xFFEFF6FF).copy(alpha = 0.78f)
                             )
                         )
                     }
                     val borderBrush = if (isDark) {
                         Brush.linearGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.34f),
-                                Color.White.copy(alpha = 0.12f)
+                                Color.White.copy(alpha = 0.48f),
+                                LuminousCyan.copy(alpha = 0.32f)
                             )
                         )
                     } else {
                         Brush.linearGradient(
                             colors = listOf(
                                 Color.White,
-                                Color.White.copy(alpha = 0.55f)
+                                Color(0xFF93C5FD).copy(alpha = 0.65f)
                             )
                         )
                     }
@@ -416,7 +449,7 @@ fun GlassActionButton(
                         drawRoundRect(
                             brush = borderBrush,
                             cornerRadius = corner,
-                            style = Stroke(width = 1.dp.toPx())
+                            style = Stroke(width = 1.1.dp.toPx())
                         )
                     }
                 }
@@ -435,7 +468,7 @@ fun GlassActionButton(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = iconColor,
                         modifier = Modifier.size(17.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -444,12 +477,191 @@ fun GlassActionButton(
                     text = text,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = labelColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
+    }
+}
+
+/**
+ * 3D Glowing RGB Camera Orb:
+ * Renders a volumetric 3D sphere with an outer multi-spectrum RGB neon halo, a 3D beveled RGB
+ * prismatic ring, a deep spherical lens core with bottom RGB bounce light, a top-left 3D glass
+ * specular reflection dome, and a crisp white camera icon.
+ */
+@Composable
+fun Glowing3dRgbCameraOrb(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 54.dp,
+    iconSize: Dp = 25.dp,
+    icon: ImageVector = Icons.Default.CameraAlt,
+    contentDescription: String = "3D RGB Camera Scan"
+) {
+    val haptics = LocalHaptics.current
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    haptics.heavy()
+                    onClick()
+                }
+            )
+            .drawWithCache {
+                val w = this.size.width
+                val h = this.size.height
+                val center = Offset(w / 2f, h / 2f)
+                val maxR = (w.coerceAtMost(h) / 2f).coerceAtLeast(1f)
+
+                val rgbColors = listOf(
+                    RgbCyan,
+                    RgbBlue,
+                    RgbViolet,
+                    RgbMagenta,
+                    RgbOrange,
+                    RgbEmerald,
+                    RgbCyan
+                )
+                val rgbSweepBrush = Brush.sweepGradient(
+                    colors = rgbColors,
+                    center = center
+                )
+                val outerHaloBrush = Brush.radialGradient(
+                    colors = listOf(
+                        RgbMagenta.copy(alpha = 0.52f),
+                        RgbCyan.copy(alpha = 0.34f),
+                        RgbViolet.copy(alpha = 0.16f),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = maxR * 1.18f
+                )
+                val bottomDropShadowBrush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.Black.copy(alpha = 0.55f),
+                        RgbBlue.copy(alpha = 0.25f),
+                        Color.Transparent
+                    ),
+                    center = Offset(center.x, center.y + maxR * 0.18f),
+                    radius = maxR * 0.98f
+                )
+                val sphereCoreRadius = maxR * 0.76f
+                val sphereCoreBrush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF283566),
+                        Color(0xFF111833),
+                        Color(0xFF060914)
+                    ),
+                    center = Offset(center.x - sphereCoreRadius * 0.25f, center.y - sphereCoreRadius * 0.28f),
+                    radius = sphereCoreRadius * 1.35f
+                )
+                val rgbInnerBounceBrush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        RgbCyan.copy(alpha = 0.35f),
+                        RgbMagenta.copy(alpha = 0.45f)
+                    ),
+                    start = Offset(center.x, center.y - sphereCoreRadius * 0.2f),
+                    end = Offset(center.x, center.y + sphereCoreRadius)
+                )
+                val specularHighlightCenter = Offset(center.x - sphereCoreRadius * 0.28f, center.y - sphereCoreRadius * 0.34f)
+                val specularBrush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.72f),
+                        Color.White.copy(alpha = 0.18f),
+                        Color.Transparent
+                    ),
+                    center = specularHighlightCenter,
+                    radius = sphereCoreRadius * 0.58f
+                )
+                val ringRadius = maxR * 0.84f
+                val ringStrokeWidth = (maxR * 0.17f).coerceAtLeast(3.dp.toPx())
+                val innerRimStrokeWidth = 1.2.dp.toPx()
+
+                onDrawBehind {
+                    // 1. 3D Drop Shadow + Outer RGB Neon Halo Bloom
+                    drawCircle(
+                        brush = bottomDropShadowBrush,
+                        radius = maxR * 0.98f,
+                        center = Offset(center.x, center.y + maxR * 0.14f)
+                    )
+                    drawCircle(
+                        brush = outerHaloBrush,
+                        radius = maxR * 1.12f,
+                        center = center
+                    )
+
+                    // 2. 3D Outer Beveled RGB Neon Ring
+                    drawCircle(
+                        brush = rgbSweepBrush,
+                        radius = ringRadius,
+                        center = center
+                    )
+
+                    // 3. 3D Spherical Dark Lens Core
+                    drawCircle(
+                        brush = sphereCoreBrush,
+                        radius = sphereCoreRadius,
+                        center = center
+                    )
+
+                    // 4. Bottom RGB Ambient Bounce Light inside the 3D Sphere
+                    drawCircle(
+                        brush = rgbInnerBounceBrush,
+                        radius = sphereCoreRadius,
+                        center = center
+                    )
+
+                    // 5. Crisp Prismatic RGB Ring Stroke & Inner Rim Highlight
+                    drawCircle(
+                        brush = rgbSweepBrush,
+                        radius = ringRadius,
+                        center = center,
+                        style = Stroke(width = ringStrokeWidth * 0.45f)
+                    )
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.42f),
+                        radius = sphereCoreRadius,
+                        center = center,
+                        style = Stroke(width = innerRimStrokeWidth)
+                    )
+
+                    // 6. Top-Left 3D Curved Specular Dome Glint
+                    drawCircle(
+                        brush = specularBrush,
+                        radius = sphereCoreRadius * 0.56f,
+                        center = specularHighlightCenter
+                    )
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        // Subtle 3D icon depth shadow
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = RgbMagenta.copy(alpha = 0.65f),
+            modifier = Modifier
+                .size(iconSize)
+                .graphicsLayer {
+                    translationX = 1.5f
+                    translationY = 2.5f
+                }
+        )
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(iconSize)
+        )
     }
 }
 
@@ -464,12 +676,12 @@ fun GlassThemeTogglePill(
 ) {
     val haptics = LocalHaptics.current
     val bg by animateColorAsState(
-        targetValue = if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.76f),
+        targetValue = if (isDark) Color(0xFF1E2D4A).copy(alpha = 0.90f) else Color.White.copy(alpha = 0.85f),
         animationSpec = tween(220),
         label = "glassToggleBg"
     )
     val border by animateColorAsState(
-        targetValue = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.95f),
+        targetValue = if (isDark) Color.White.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.95f),
         animationSpec = tween(220),
         label = "glassToggleBorder"
     )
@@ -498,8 +710,8 @@ fun GlassThemeTogglePill(
             Text(
                 text = if (isDark) "Dark" else "Light",
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                fontWeight = FontWeight.Bold,
+                color = if (isDark) Color.White else LightOnSurface
             )
         }
     }
@@ -514,7 +726,8 @@ data class LiquidGlassNavTab(
 )
 
 /**
- * Ultra-smooth 120fps iPhone iOS 18 / visionOS Liquid Glass Bottom Navigation Bar.
+ * Ultra-smooth 120fps iPhone iOS 18 / visionOS Liquid Glass Bottom Navigation Bar
+ * featuring a centerpiece 3D Glowing RGB Camera Orb in the middle of the dock.
  * - Reads continuous swipe progress inside `drawWithContent` and `graphicsLayer` (draw phase only)
  *   so swiping left/right across tabs causes ZERO recompositions!
  */
@@ -523,7 +736,8 @@ fun LiquidGlassBottomBar(
     tabs: List<LiquidGlassNavTab>,
     modifier: Modifier = Modifier,
     selectedProgress: Float? = null,
-    selectedProgressProvider: (() -> Float)? = null
+    selectedProgressProvider: (() -> Float)? = null,
+    onCenterCameraClick: (() -> Unit)? = null
 ) {
     val isDark = LocalIsDarkGlass.current
     val haptics = LocalHaptics.current
@@ -542,61 +756,62 @@ fun LiquidGlassBottomBar(
 
     // Animated translucent glass colors so switching Light <-> Dark mode melts seamlessly
     val glassStart by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF1E293B).copy(alpha = 0.64f) else Color.White.copy(alpha = 0.72f),
+        targetValue = if (isDark) Color(0xFF1E2D4A).copy(alpha = 0.82f) else Color.White.copy(alpha = 0.82f),
         animationSpec = tween(240),
         label = "dockGlassStart"
     )
     val glassMid by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF0F172A).copy(alpha = 0.72f) else Color(0xFFEFF6FF).copy(alpha = 0.64f),
+        targetValue = if (isDark) Color(0xFF0F182A).copy(alpha = 0.88f) else Color(0xFFEFF6FF).copy(alpha = 0.78f),
         animationSpec = tween(240),
         label = "dockGlassMid"
     )
     val glassEnd by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF172554).copy(alpha = 0.60f) else Color.White.copy(alpha = 0.75f),
+        targetValue = if (isDark) Color(0xFF17284A).copy(alpha = 0.82f) else Color.White.copy(alpha = 0.85f),
         animationSpec = tween(240),
         label = "dockGlassEnd"
     )
 
     val borderTop by animateColorAsState(
-        targetValue = if (isDark) Color.White.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.94f),
+        targetValue = if (isDark) Color.White.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.96f),
         animationSpec = tween(240),
         label = "dockBorderTop"
     )
     val borderMid by animateColorAsState(
-        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.22f) else Color(0xFF93C5FD).copy(alpha = 0.45f),
+        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.28f) else Color(0xFF93C5FD).copy(alpha = 0.52f),
         animationSpec = tween(240),
         label = "dockBorderMid"
     )
     val borderBottom by animateColorAsState(
-        targetValue = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.72f),
+        targetValue = if (isDark) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.78f),
         animationSpec = tween(240),
         label = "dockBorderBottom"
     )
 
     val pillFillTop by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF0A84FF).copy(alpha = 0.34f) else Color.White.copy(alpha = 0.90f),
+        targetValue = if (isDark) Color(0xFF0A84FF).copy(alpha = 0.42f) else Color.White.copy(alpha = 0.94f),
         animationSpec = tween(220),
         label = "pillFillTop"
     )
     val pillFillBottom by animateColorAsState(
-        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.18f) else Color(0xFFDBEAFE).copy(alpha = 0.80f),
+        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.24f) else Color(0xFFDBEAFE).copy(alpha = 0.86f),
         animationSpec = tween(220),
         label = "pillFillBottom"
     )
     val pillStrokeColor by animateColorAsState(
-        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.58f) else RoyalBlue.copy(alpha = 0.28f),
+        targetValue = if (isDark) LuminousCyan.copy(alpha = 0.70f) else RoyalBlue.copy(alpha = 0.34f),
         animationSpec = tween(220),
         label = "pillStroke"
     )
 
     val ambientScrimColor by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF050A16).copy(alpha = 0.50f) else Color(0xFFDCE8F8).copy(alpha = 0.52f),
+        targetValue = if (isDark) Color(0xFF050A16).copy(alpha = 0.55f) else Color(0xFFDCE8F8).copy(alpha = 0.55f),
         animationSpec = tween(240),
         label = "ambientScrim"
     )
 
-    val topGlintColor = if (isDark) Color.White.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.95f)
+    val topGlintColor = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.96f)
     val maxTabIndex = (tabs.size - 1).coerceAtLeast(0).toFloat()
+    val hasCenterOrb = onCenterCameraClick != null && tabs.size == 4
 
     Box(
         modifier = modifier
@@ -613,12 +828,12 @@ fun LiquidGlassBottomBar(
                 )
             }
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier
-                .widthIn(max = 500.dp)
+                .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .clip(dockShape)
                 .drawWithCache {
@@ -629,10 +844,11 @@ fun LiquidGlassBottomBar(
                     val tabCount = tabs.size.coerceAtLeast(1)
                     val horizontalPad = 6.dp.toPx()
                     val verticalPad = 5.dp.toPx()
-                    val availableWidth = (size.width - horizontalPad * 2f).coerceAtLeast(1f)
+                    val centerSlotW = if (hasCenterOrb) 62.dp.toPx() else 0f
+                    val availableWidth = (size.width - horizontalPad * 2f - centerSlotW).coerceAtLeast(1f)
                     val slotWidth = availableWidth / tabCount
                     val pillHeight = (size.height - verticalPad * 2f).coerceAtLeast(1f)
-                    val pillCorner = CornerRadius(26.dp.toPx(), 26.dp.toPx())
+                    val pillCorner = CornerRadius(24.dp.toPx(), 24.dp.toPx())
                     val pillFillBrush = Brush.verticalGradient(
                         colors = listOf(pillFillTop, pillFillBottom),
                         startY = verticalPad,
@@ -656,7 +872,21 @@ fun LiquidGlassBottomBar(
                         // Read continuous progress in draw phase only (zero recomposition!)
                         val currentProgress = (selectedProgressProvider?.invoke() ?: fallbackAnimatedProgress)
                             .coerceIn(0f, maxTabIndex)
-                        val pillLeft = horizontalPad + currentProgress * slotWidth
+
+                        val pillLeft = if (hasCenterOrb) {
+                            when {
+                                currentProgress <= 1f -> horizontalPad + currentProgress * slotWidth
+                                currentProgress >= 2f -> horizontalPad + centerSlotW + currentProgress * slotWidth
+                                else -> {
+                                    val t = currentProgress - 1f
+                                    val startX = horizontalPad + 1f * slotWidth
+                                    val endX = horizontalPad + centerSlotW + 2f * slotWidth
+                                    startX + (endX - startX) * t
+                                }
+                            }
+                        } else {
+                            horizontalPad + currentProgress * slotWidth
+                        }
 
                         // Continuous sliding Liquid Glass Active Pill
                         drawRoundRect(
@@ -689,15 +919,32 @@ fun LiquidGlassBottomBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             tabs.forEachIndexed { index, tab ->
-                val activeColor = if (isDark) LuminousCyan else RoyalBlue
-                val inactiveColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF475569)
+                // Inject the 3D Glowing RGB Center Camera Orb right in the middle of the dock (between tab 1 and tab 2)
+                if (hasCenterOrb && index == 2) {
+                    Box(
+                        modifier = Modifier
+                            .width(62.dp)
+                            .padding(vertical = 1.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Glowing3dRgbCameraOrb(
+                            onClick = { onCenterCameraClick?.invoke() },
+                            size = 52.dp,
+                            iconSize = 24.dp,
+                            contentDescription = "Center 3D RGB Camera"
+                        )
+                    }
+                }
+
+                val activeColor = if (isDark) Color.White else RoyalBlue
+                val inactiveColor = if (isDark) Color(0xFFD8E4F8) else Color(0xFF334155)
                 val tintColor = if (tab.selected) activeColor else inactiveColor
                 val interactionSource = remember { MutableInteractionSource() }
 
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(22.dp))
                         .clickable(
                             interactionSource = interactionSource,
                             indication = null,
@@ -706,7 +953,7 @@ fun LiquidGlassBottomBar(
                                 tab.onClick()
                             }
                         )
-                        .padding(vertical = 7.dp, horizontal = 4.dp)
+                        .padding(vertical = 7.dp, horizontal = 2.dp)
                         .testTag(tab.testTag),
                     contentAlignment = Alignment.Center
                 ) {
@@ -726,13 +973,13 @@ fun LiquidGlassBottomBar(
                         Icon(
                             imageVector = tab.icon,
                             contentDescription = tab.label,
-                            tint = tintColor,
-                            modifier = Modifier.size(21.dp)
+                            tint = if (tab.selected && isDark) LuminousCyan else tintColor,
+                            modifier = Modifier.size(20.dp)
                         )
                         Text(
                             text = tab.label,
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (tab.selected) FontWeight.Bold else FontWeight.Medium,
+                            fontWeight = if (tab.selected) FontWeight.ExtraBold else FontWeight.SemiBold,
                             color = tintColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -743,4 +990,5 @@ fun LiquidGlassBottomBar(
         }
     }
 }
+
 
