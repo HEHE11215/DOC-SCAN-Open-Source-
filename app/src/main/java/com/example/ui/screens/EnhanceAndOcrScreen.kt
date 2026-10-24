@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -59,6 +60,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -615,57 +617,57 @@ private fun EnhanceControlsPanel(
                 }
             }
 
-            // Aligned Action Buttons (Crop, Rotate, Sign, Tune, Delete)
+            // Aligned Action Buttons (Crop, Rotate, Sign, Stamp, Tune, Delete)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                GlassActionButton(
+                EnhanceToolButton(
                     text = "Crop",
                     icon = Icons.Default.Crop,
-                    height = 40.dp,
                     onClick = onManualCropEdges,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("manual_crop_edges_button")
                 )
-                GlassActionButton(
+                EnhanceToolButton(
                     text = "Rotate",
                     icon = Icons.AutoMirrored.Filled.RotateRight,
-                    height = 40.dp,
                     onClick = onRotate90,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("enhance_rotate_page_button")
                 )
-                GlassActionButton(
+                EnhanceToolButton(
                     text = "Sign",
                     icon = androidx.compose.material.icons.Icons.Default.Edit,
-                    height = 40.dp,
                     onClick = onOpenSignDialog,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("enhance_sign_page_button")
                 )
-                GlassActionButton(
+                EnhanceToolButton(
                     text = "Stamp",
                     icon = Icons.Default.Approval,
-                    height = 40.dp,
                     onClick = onOpenStampDialog,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("enhance_stamp_page_button")
                 )
-                GlassActionButton(
+                EnhanceToolButton(
                     text = "Tune",
                     icon = Icons.Default.Tune,
-                    height = 40.dp,
+                    isSelected = showSliders,
                     onClick = onToggleSliders,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("enhance_tune_page_button")
                 )
                 if (canDeletePage) {
                     IconButton(
                         onClick = onDeletePage,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             Icons.Default.Delete,
@@ -675,6 +677,61 @@ private fun EnhanceControlsPanel(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EnhanceToolButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false
+) {
+    val bgColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+    }
+    val contentColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(50.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = bgColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 2.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                tint = contentColor,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = text,
+                color = contentColor,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }
