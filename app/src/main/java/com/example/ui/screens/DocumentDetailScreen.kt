@@ -126,6 +126,7 @@ import com.example.domain.model.PageNumberFormat
 import com.example.domain.model.PageNumberPosition
 import com.example.domain.model.PdfQuality
 import com.example.domain.model.ScanFilter
+import com.example.ui.theme.DynamicRgbChip
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.FrostedGlassCard
 import com.example.ui.theme.GlassActionButton
@@ -299,35 +300,15 @@ fun DocumentDetailScreen(
                     if (!isLocked) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Surface(
+                            DynamicRgbChip(
+                                text = "Edit PDF",
                                 onClick = { onOpenDirectPdfEditor(0) },
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.testTag("detail_direct_edit_pdf_button")
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.EditNote,
-                                        contentDescription = "Direct Edit PDF",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = "Edit PDF",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        color = Color.White
-                                    )
-                                }
-                            }
+                                icon = Icons.Default.EditNote,
+                                badgeText = "RGB",
+                                testTag = "detail_direct_edit_pdf_button"
+                            )
                             IconButton(
                                 onClick = {
                                     viewModel.shareDocumentPageAsPicture(currentDoc, 0)

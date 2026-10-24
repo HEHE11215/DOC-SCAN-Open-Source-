@@ -14,6 +14,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -94,6 +97,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -131,6 +135,7 @@ import com.example.utils.OcrAndBarcodeEngine
 import com.example.utils.PdfEngine
 import com.example.utils.ShareExportHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
@@ -141,12 +146,12 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 enum class DirectEditorToolMode(val label: String) {
-    TAP_TEXT_REPLACE("Edit PDF Text"),
-    PAN_AND_ZOOM("Zoom & Pan"),
-    ADD_TEXT_OR_COMMENT("Add / Move Text"),
-    WHITEOUT_ERASER("Whiteout"),
+    TAP_TEXT_REPLACE("Edit Text"),
+    PAN_AND_ZOOM("Pan / Zoom"),
+    ADD_TEXT_OR_COMMENT("+ Text"),
+    WHITEOUT_ERASER("Erase"),
     HIGHLIGHTER("Highlight"),
-    INK_PEN("Ink Pen")
+    INK_PEN("Pen")
 }
 
 enum class TextPatchBackgroundStyle(val label: String) {
@@ -243,9 +248,38 @@ fun DirectPdfEditorScreen(
     var studioViewMode by remember { mutableStateOf(PdfStudioViewMode.VISUAL_CANVAS) }
     var showTextBoxesOutline by remember { mutableStateOf(true) }
 
-    // Zoom & Pan state for the PDF Page Studio
-    var zoomScale by remember { mutableFloatStateOf(1f) }
-    var panOffset by remember { mutableStateOf(Offset.Zero) }
+    // Smooth Animatable Zoom & Pan state for the PDF Page Studio
+    val coroutineScope = rememberCoroutineScope()
+    val animatableZoom = remember { Animatable(1f) }
+    val animatablePanX = remember { Animatable(0f) }
+    val animatablePanY = remember { Animatable(0f) }
+
+    val zoomScale = animatableZoom.value
+    val panOffset = Offset(animatablePanX.value, animatablePanY.value)
+
+    fun animateZoomTo(targetScale: Float, targetPan: Offset = Offset.Zero) {
+        val clampedZoom = targetScale.coerceIn(1f, 4.5f)
+        coroutineScope.launch {
+            launch {
+                animatableZoom.animateTo(
+                    targetValue = clampedZoom,
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                animatablePanX.animateTo(
+                    targetValue = if (clampedZoom <= 1.02f) 0f else targetPan.x,
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                animatablePanY.animateTo(
+                    targetValue = if (clampedZoom <= 1.02f) 0f else targetPan.y,
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                )
+            }
+        }
+    }
 
     // Brush & Ink settings
     var activeInkColorArgb by remember { mutableIntStateOf(AndroidColor.rgb(15, 23, 42)) }
@@ -599,7 +633,7 @@ fun DirectPdfEditorScreen(
                             },
                             label = {
                                 Text(
-                                    text = "Visual PDF Page",
+                                    text = "Page View",
                                     maxLines = 1,
                                     softWrap = false,
                                     fontWeight = FontWeight.Bold
@@ -617,7 +651,7 @@ fun DirectPdfEditorScreen(
                             },
                             label = {
                                 Text(
-                                    text = "Edit All PDF Text (${textPatches.size})",
+                                    text = "All Text (${textPatches.size})",
                                     maxLines = 1,
                                     softWrap = false,
                                     fontWeight = FontWeight.Bold
@@ -629,7 +663,7 @@ fun DirectPdfEditorScreen(
                             modifier = Modifier.testTag("direct_editor_replace_text_chip")
                         )
 
-                        // 1-Tap Zoom Controls: Zoom Out, Zoom %, Zoom In, Fit
+                        // 1-Tap Smooth Zoom Controls: Zoom Out, Zoom %, Zoom In, Reset
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.75f)
@@ -642,8 +676,9 @@ fun DirectPdfEditorScreen(
                                 IconButton(
                                     onClick = {
                                         haptics.tick()
-                                        zoomScale = (zoomScale - 0.4f).coerceIn(1f, 4.5f)
-                                        if (zoomScale <= 1.02f) panOffset = Offset.Zero
+                                        val nextZ = (animatableZoom.value - 0.5f).coerceIn(1f, 4.5f)
+                                        val factor = if (animatableZoom.value > 1.02f) (nextZ - 1f) / (animatableZoom.value - 1f) else 1f
+                                        animateZoomTo(nextZ, Offset(animatablePanX.value * factor, animatablePanY.value * factor))
                                     },
                                     modifier = Modifier
                                         .size(28.dp)
@@ -652,22 +687,24 @@ fun DirectPdfEditorScreen(
                                     Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out", modifier = Modifier.size(16.dp))
                                 }
                                 Text(
-                                    text = "${(zoomScale * 100).roundToInt()}%",
+                                    text = "${(animatableZoom.value * 100).roundToInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     softWrap = false,
                                     modifier = Modifier
                                         .clickable {
-                                            zoomScale = 1f
-                                            panOffset = Offset.Zero
+                                            haptics.tick()
+                                            animateZoomTo(1f, Offset.Zero)
                                         }
                                         .padding(horizontal = 4.dp)
                                 )
                                 IconButton(
                                     onClick = {
                                         haptics.tick()
-                                        zoomScale = (zoomScale + 0.5f).coerceIn(1f, 4.5f)
+                                        val nextZ = (animatableZoom.value + 0.5f).coerceIn(1f, 4.5f)
+                                        val factor = if (animatableZoom.value > 1.02f) (nextZ - 1f) / (animatableZoom.value - 1f) else 1f
+                                        animateZoomTo(nextZ, Offset(animatablePanX.value * factor, animatablePanY.value * factor))
                                     },
                                     modifier = Modifier
                                         .size(28.dp)
@@ -675,12 +712,11 @@ fun DirectPdfEditorScreen(
                                 ) {
                                     Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", modifier = Modifier.size(16.dp))
                                 }
-                                if (zoomScale > 1.05f) {
+                                if (animatableZoom.value > 1.05f) {
                                     IconButton(
                                         onClick = {
                                             haptics.tick()
-                                            zoomScale = 1f
-                                            panOffset = Offset.Zero
+                                            animateZoomTo(1f, Offset.Zero)
                                         },
                                         modifier = Modifier.size(28.dp)
                                     ) {
@@ -694,12 +730,12 @@ fun DirectPdfEditorScreen(
                             }
                         }
 
-                        // Toggle showing blue dashed boxes around editable text
+                        // Toggle showing boxes around editable text
                         AssistChip(
                             onClick = { showTextBoxesOutline = !showTextBoxesOutline },
                             label = {
                                 Text(
-                                    text = if (showTextBoxesOutline) "Hide Boxes" else "Show Boxes",
+                                    text = "Boxes",
                                     maxLines = 1,
                                     softWrap = false
                                 )
@@ -718,7 +754,7 @@ fun DirectPdfEditorScreen(
                                 haptics.click()
                                 createNewTextOrCommentBox(isCommentStyle = false)
                             },
-                            label = { Text("+ Add Text", maxLines = 1, softWrap = false) },
+                            label = { Text("+ Text", maxLines = 1, softWrap = false) },
                             leadingIcon = {
                                 Icon(Icons.Default.TextFields, contentDescription = null, modifier = Modifier.size(16.dp))
                             },
@@ -730,7 +766,7 @@ fun DirectPdfEditorScreen(
                                 haptics.click()
                                 createNewTextOrCommentBox(isCommentStyle = true)
                             },
-                            label = { Text("+ Comment", maxLines = 1, softWrap = false) },
+                            label = { Text("+ Note", maxLines = 1, softWrap = false) },
                             leadingIcon = {
                                 Icon(Icons.Default.AddComment, contentDescription = null, modifier = Modifier.size(16.dp))
                             },
@@ -787,8 +823,7 @@ fun DirectPdfEditorScreen(
                                     selected = activePageIndex == idx,
                                     onClick = {
                                         activePageIndex = idx
-                                        zoomScale = 1f
-                                        panOffset = Offset.Zero
+                                        animateZoomTo(1f, Offset.Zero)
                                     },
                                     label = { Text("Page ${idx + 1}", maxLines = 1, softWrap = false) }
                                 )
@@ -1016,20 +1051,32 @@ fun DirectPdfEditorScreen(
                                 .background(Color.White)
                                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                                 .pointerInput(Unit) {
-                                    // Always allow 2-finger pinch-to-zoom and pan
-                                    detectTransformGestures { _, pan, zoom, _ ->
-                                        if (zoom != 1f || activeTool == DirectEditorToolMode.PAN_AND_ZOOM) {
-                                            val nextZoom = (zoomScale * zoom).coerceIn(1f, 4.5f)
-                                            zoomScale = nextZoom
-                                            if (nextZoom > 1.01f) {
+                                    // Smooth 2-finger pinch-to-zoom and pan with centroid pivot tracking
+                                    detectTransformGestures { centroid, pan, zoom, _ ->
+                                        if (zoom != 1f || pan != Offset.Zero) {
+                                            coroutineScope.launch {
+                                                val currentZoom = animatableZoom.value
+                                                val nextZoom = (currentZoom * zoom).coerceIn(1f, 4.5f)
+                                                val effectiveZoom = nextZoom / currentZoom.coerceAtLeast(0.01f)
                                                 val maxPanX = (size.width * (nextZoom - 1f)) / 2f
                                                 val maxPanY = (size.height * (nextZoom - 1f)) / 2f
-                                                panOffset = Offset(
-                                                    (panOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                                    (panOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
-                                                )
-                                            } else {
-                                                panOffset = Offset.Zero
+
+                                                if (nextZoom <= 1.02f) {
+                                                    animatableZoom.snapTo(nextZoom)
+                                                    animatablePanX.snapTo(0f)
+                                                    animatablePanY.snapTo(0f)
+                                                } else {
+                                                    val centroidRelX = centroid.x - size.width / 2f
+                                                    val centroidRelY = centroid.y - size.height / 2f
+                                                    val newPanX = (animatablePanX.value * effectiveZoom + pan.x + (1f - effectiveZoom) * centroidRelX)
+                                                        .coerceIn(-maxPanX, maxPanX)
+                                                    val newPanY = (animatablePanY.value * effectiveZoom + pan.y + (1f - effectiveZoom) * centroidRelY)
+                                                        .coerceIn(-maxPanY, maxPanY)
+
+                                                    animatableZoom.snapTo(nextZoom)
+                                                    animatablePanX.snapTo(newPanX)
+                                                    animatablePanY.snapTo(newPanY)
+                                                }
                                             }
                                         }
                                     }
@@ -1057,31 +1104,51 @@ fun DirectPdfEditorScreen(
                                     ) {
                                         when (activeTool) {
                                             DirectEditorToolMode.TAP_TEXT_REPLACE -> {
-                                                detectTapGestures { tapOffset ->
-                                                    val normX = (tapOffset.x / size.width.toFloat()).coerceIn(0f, 1f)
-                                                    val normY = (tapOffset.y / size.height.toFloat()).coerceIn(0f, 1f)
+                                                detectTapGestures(
+                                                    onDoubleTap = { tapOffset ->
+                                                        haptics.tick()
+                                                        if (animatableZoom.value > 1.25f) {
+                                                            animateZoomTo(1f, Offset.Zero)
+                                                        } else {
+                                                            val targetZoom = 2.4f
+                                                            val canvasW = size.width.toFloat()
+                                                            val canvasH = size.height.toFloat()
+                                                            val maxPanX = (canvasW * (targetZoom - 1f)) / 2f
+                                                            val maxPanY = (canvasH * (targetZoom - 1f)) / 2f
+                                                            val targetPanX = ((canvasW / 2f) - tapOffset.x) * (targetZoom - 1f)
+                                                            val targetPanY = ((canvasH / 2f) - tapOffset.y) * (targetZoom - 1f)
+                                                            animateZoomTo(
+                                                                targetScale = targetZoom,
+                                                                targetPan = Offset(targetPanX.coerceIn(-maxPanX, maxPanX), targetPanY.coerceIn(-maxPanY, maxPanY))
+                                                            )
+                                                        }
+                                                    },
+                                                    onTap = { tapOffset ->
+                                                        val normX = (tapOffset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                                                        val normY = (tapOffset.y / size.height.toFloat()).coerceIn(0f, 1f)
 
-                                                    // Find the specific text element closest to the tap point
-                                                    val hitPatch = findBestMatchingPatchAtPoint(
-                                                        patches = textPatches,
-                                                        normX = normX,
-                                                        normY = normY,
-                                                        pageWidth = size.width.toFloat(),
-                                                        pageHeight = size.height.toFloat()
-                                                    )
-                                                    if (hitPatch != null) {
-                                                        haptics.click()
-                                                        selectedPatchId = hitPatch.id
-                                                    } else {
-                                                        // Tapped blank area -> create new text element at that exact spot
-                                                        haptics.click()
-                                                        createNewTextOrCommentBox(
-                                                            isCommentStyle = false,
-                                                            normX = (normX - 0.08f).coerceIn(0.02f, 0.78f),
-                                                            normY = (normY - 0.012f).coerceIn(0.02f, 0.92f)
+                                                        // Find the specific text element closest to the tap point
+                                                        val hitPatch = findBestMatchingPatchAtPoint(
+                                                            patches = textPatches,
+                                                            normX = normX,
+                                                            normY = normY,
+                                                            pageWidth = size.width.toFloat(),
+                                                            pageHeight = size.height.toFloat()
                                                         )
+                                                        if (hitPatch != null) {
+                                                            haptics.click()
+                                                            selectedPatchId = hitPatch.id
+                                                        } else {
+                                                            // Tapped blank area -> create new text element at that exact spot
+                                                            haptics.click()
+                                                            createNewTextOrCommentBox(
+                                                                isCommentStyle = false,
+                                                                normX = (normX - 0.08f).coerceIn(0.02f, 0.78f),
+                                                                normY = (normY - 0.012f).coerceIn(0.02f, 0.92f)
+                                                            )
+                                                        }
                                                     }
-                                                }
+                                                )
                                             }
 
                                             DirectEditorToolMode.ADD_TEXT_OR_COMMENT -> {
@@ -1119,7 +1186,20 @@ fun DirectPdfEditorScreen(
                                             }
 
                                             DirectEditorToolMode.PAN_AND_ZOOM -> {
-                                                // Handled by detectTransformGestures on parent Box
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    coroutineScope.launch {
+                                                        val currentZoom = animatableZoom.value
+                                                        val maxPanX = (size.width * (currentZoom - 1f)) / 2f
+                                                        val maxPanY = (size.height * (currentZoom - 1f)) / 2f
+                                                        if (currentZoom > 1.01f) {
+                                                            val newX = (animatablePanX.value + dragAmount.x).coerceIn(-maxPanX, maxPanX)
+                                                            val newY = (animatablePanY.value + dragAmount.y).coerceIn(-maxPanY, maxPanY)
+                                                            animatablePanX.snapTo(newX)
+                                                            animatablePanY.snapTo(newY)
+                                                        }
+                                                    }
+                                                }
                                             }
 
                                             DirectEditorToolMode.WHITEOUT_ERASER,
@@ -1318,9 +1398,9 @@ fun DirectPdfEditorScreen(
                                     label = {
                                         Text(
                                             text = if (activePatch.originalReplacedText.isNotBlank()) {
-                                                "Editing PDF Text (was: \"${activePatch.originalReplacedText.take(24)}\")"
+                                                "Text (was: \"${activePatch.originalReplacedText.take(12)}\")"
                                             } else {
-                                                "Editing Added PDF Text"
+                                                "Edit Text"
                                             },
                                             maxLines = 1,
                                             softWrap = false,
@@ -1450,7 +1530,7 @@ fun DirectPdfEditorScreen(
                                             Icon(Icons.Default.Remove, contentDescription = "Smaller font", modifier = Modifier.size(15.dp))
                                         }
                                         Text(
-                                            text = "Size ${(activePatch.fontHeightNorm * 720f).roundToInt()}",
+                                            text = "${(activePatch.fontHeightNorm * 720f).roundToInt()}pt",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 1,

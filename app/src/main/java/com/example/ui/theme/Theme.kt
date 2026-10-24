@@ -2,8 +2,14 @@ package com.example.ui.theme
 
 import android.app.Activity
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -59,7 +65,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -489,10 +497,10 @@ fun GlassActionButton(
 }
 
 /**
- * 3D Glowing RGB Camera Orb:
- * Renders a volumetric 3D sphere with an outer multi-spectrum RGB neon halo, a 3D beveled RGB
- * prismatic ring, a deep spherical lens core with bottom RGB bounce light, a top-left 3D glass
- * specular reflection dome, and a crisp white camera icon.
+ * 3D Dynamic Glowing RGB Camera Orb:
+ * Features a volumetric 3D sphere with an animated rotating RGB chromatic halo,
+ * rotating beveled neon ring, inner RGB bounce light, specular 3D reflection,
+ * and glowing depth shadow.
  */
 @Composable
 fun Glowing3dRgbCameraOrb(
@@ -501,10 +509,40 @@ fun Glowing3dRgbCameraOrb(
     size: Dp = 54.dp,
     iconSize: Dp = 25.dp,
     icon: ImageVector = Icons.Default.CameraAlt,
-    contentDescription: String = "3D RGB Camera Scan"
+    contentDescription: String = "Dynamic 3D RGB Camera Scan"
 ) {
     val haptics = LocalHaptics.current
     val interactionSource = remember { MutableInteractionSource() }
+
+    // Dynamic rotating RGB animation
+    val infiniteTransition = rememberInfiniteTransition(label = "DynamicRgbCameraTransition")
+    val rotationAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "RgbCameraRotation"
+    )
+    val pulseGlow by infiniteTransition.animateFloat(
+        initialValue = 0.98f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "RgbCameraPulse"
+    )
+    val haloAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.42f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "RgbCameraHaloAlpha"
+    )
 
     Box(
         modifier = modifier
@@ -538,13 +576,13 @@ fun Glowing3dRgbCameraOrb(
                 )
                 val outerHaloBrush = Brush.radialGradient(
                     colors = listOf(
-                        RgbMagenta.copy(alpha = 0.52f),
-                        RgbCyan.copy(alpha = 0.34f),
-                        RgbViolet.copy(alpha = 0.16f),
+                        RgbMagenta.copy(alpha = 0.65f),
+                        RgbCyan.copy(alpha = 0.45f),
+                        RgbViolet.copy(alpha = 0.22f),
                         Color.Transparent
                     ),
                     center = center,
-                    radius = maxR * 1.18f
+                    radius = maxR * 1.25f
                 )
                 val bottomDropShadowBrush = Brush.radialGradient(
                     colors = listOf(
@@ -568,8 +606,8 @@ fun Glowing3dRgbCameraOrb(
                 val rgbInnerBounceBrush = Brush.linearGradient(
                     colors = listOf(
                         Color.Transparent,
-                        RgbCyan.copy(alpha = 0.35f),
-                        RgbMagenta.copy(alpha = 0.45f)
+                        RgbCyan.copy(alpha = 0.40f),
+                        RgbMagenta.copy(alpha = 0.55f)
                     ),
                     start = Offset(center.x, center.y - sphereCoreRadius * 0.2f),
                     end = Offset(center.x, center.y + sphereCoreRadius)
@@ -577,8 +615,8 @@ fun Glowing3dRgbCameraOrb(
                 val specularHighlightCenter = Offset(center.x - sphereCoreRadius * 0.28f, center.y - sphereCoreRadius * 0.34f)
                 val specularBrush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.72f),
-                        Color.White.copy(alpha = 0.18f),
+                        Color.White.copy(alpha = 0.75f),
+                        Color.White.copy(alpha = 0.20f),
                         Color.Transparent
                     ),
                     center = specularHighlightCenter,
@@ -589,54 +627,65 @@ fun Glowing3dRgbCameraOrb(
                 val innerRimStrokeWidth = 1.2.dp.toPx()
 
                 onDrawBehind {
-                    // 1. 3D Drop Shadow + Outer RGB Neon Halo Bloom
+                    // 1. 3D Drop Shadow
                     drawCircle(
                         brush = bottomDropShadowBrush,
                         radius = maxR * 0.98f,
                         center = Offset(center.x, center.y + maxR * 0.14f)
                     )
-                    drawCircle(
-                        brush = outerHaloBrush,
-                        radius = maxR * 1.12f,
-                        center = center
-                    )
 
-                    // 2. 3D Outer Beveled RGB Neon Ring
-                    drawCircle(
-                        brush = rgbSweepBrush,
-                        radius = ringRadius,
-                        center = center
-                    )
+                    // 2. Dynamic Rotating Outer RGB Neon Halo Bloom
+                    rotate(degrees = rotationAngle, pivot = center) {
+                        drawCircle(
+                            brush = outerHaloBrush,
+                            radius = maxR * 1.15f * pulseGlow,
+                            center = center,
+                            alpha = haloAlpha
+                        )
+                    }
 
-                    // 3. 3D Spherical Dark Lens Core
+                    // 3. Dynamic Rotating 3D Outer Beveled RGB Neon Ring
+                    rotate(degrees = rotationAngle, pivot = center) {
+                        drawCircle(
+                            brush = rgbSweepBrush,
+                            radius = ringRadius,
+                            center = center
+                        )
+                    }
+
+                    // 4. 3D Spherical Dark Lens Core (stays steady for 3D depth)
                     drawCircle(
                         brush = sphereCoreBrush,
                         radius = sphereCoreRadius,
                         center = center
                     )
 
-                    // 4. Bottom RGB Ambient Bounce Light inside the 3D Sphere
-                    drawCircle(
-                        brush = rgbInnerBounceBrush,
-                        radius = sphereCoreRadius,
-                        center = center
-                    )
+                    // 5. Dynamic Bottom RGB Ambient Bounce Light rotating smoothly
+                    rotate(degrees = -rotationAngle * 0.5f, pivot = center) {
+                        drawCircle(
+                            brush = rgbInnerBounceBrush,
+                            radius = sphereCoreRadius,
+                            center = center
+                        )
+                    }
 
-                    // 5. Crisp Prismatic RGB Ring Stroke & Inner Rim Highlight
+                    // 6. Dynamic Crisp Prismatic RGB Ring Stroke & Inner Rim Highlight
+                    rotate(degrees = rotationAngle, pivot = center) {
+                        drawCircle(
+                            brush = rgbSweepBrush,
+                            radius = ringRadius,
+                            center = center,
+                            style = Stroke(width = ringStrokeWidth * 0.45f)
+                        )
+                    }
                     drawCircle(
-                        brush = rgbSweepBrush,
-                        radius = ringRadius,
-                        center = center,
-                        style = Stroke(width = ringStrokeWidth * 0.45f)
-                    )
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.42f),
+                        color = Color.White.copy(alpha = 0.45f),
                         radius = sphereCoreRadius,
                         center = center,
                         style = Stroke(width = innerRimStrokeWidth)
                     )
 
-                    // 6. Top-Left 3D Curved Specular Dome Glint
+                    // 7. Top-Left 3D Curved Specular Dome Glint
                     drawCircle(
                         brush = specularBrush,
                         radius = sphereCoreRadius * 0.56f,
@@ -646,11 +695,11 @@ fun Glowing3dRgbCameraOrb(
             },
         contentAlignment = Alignment.Center
     ) {
-        // Subtle 3D icon depth shadow
+        // Dynamic glowing chromatic depth shadow under the icon
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = RgbMagenta.copy(alpha = 0.65f),
+            tint = RgbMagenta.copy(alpha = 0.70f),
             modifier = Modifier
                 .size(iconSize)
                 .graphicsLayer {
@@ -665,6 +714,169 @@ fun Glowing3dRgbCameraOrb(
             modifier = Modifier.size(iconSize)
         )
     }
+}
+
+/**
+ * Dynamic 3D Glowing RGB Action Button:
+ * Prominent interactive button with an animated rotating RGB chromatic border,
+ * liquid glass backdrop, glowing neon reflection, and high-contrast typography.
+ * Tailored specifically for prominent features like the Direct PDF Editor.
+ */
+@Composable
+fun DynamicRgbActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = Icons.Default.EditNote,
+    badgeText: String? = "FREE",
+    height: Dp = 44.dp,
+    testTag: String = "dynamic_rgb_action_button"
+) {
+    val haptics = LocalHaptics.current
+    val isDark = LocalIsDarkGlass.current
+    val infiniteTransition = rememberInfiniteTransition(label = "DynamicRgbButton")
+    val sweepAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "RgbButtonSweep"
+    )
+    val glowPulse by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "RgbButtonGlowPulse"
+    )
+
+    val shape = RoundedCornerShape(14.dp)
+    val rgbColors = remember {
+        listOf(
+            RgbCyan,
+            RgbBlue,
+            RgbViolet,
+            RgbMagenta,
+            RgbOrange,
+            RgbEmerald,
+            RgbCyan
+        )
+    }
+
+    Surface(
+        onClick = {
+            haptics.heavy()
+            onClick()
+        },
+        shape = shape,
+        color = if (isDark) Color(0xFF0F172A).copy(alpha = 0.88f) else Color.White.copy(alpha = 0.94f),
+        tonalElevation = 6.dp,
+        modifier = modifier
+            .height(height)
+            .testTag(testTag)
+            .drawBehind {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val sweepBrush = Brush.sweepGradient(colors = rgbColors, center = center)
+
+                // Outer rotating chromatic neon bloom
+                rotate(sweepAngle, center) {
+                    drawRoundRect(
+                        brush = sweepBrush,
+                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
+                        size = Size(size.width + 6.dp.toPx(), size.height + 6.dp.toPx()),
+                        cornerRadius = CornerRadius(17.dp.toPx(), 17.dp.toPx()),
+                        style = Stroke(width = 3.5.dp.toPx()),
+                        alpha = glowPulse * 0.45f
+                    )
+                }
+
+                // Crisp rotating RGB perimeter stroke
+                rotate(sweepAngle, center) {
+                    drawRoundRect(
+                        brush = sweepBrush,
+                        cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx()),
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+            }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (icon != null) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(RgbCyan, RgbMagenta)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+            if (badgeText != null) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = RgbEmerald.copy(alpha = 0.20f),
+                    border = BorderStroke(1.dp, RgbEmerald.copy(alpha = 0.50f))
+                ) {
+                    Text(
+                        text = badgeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isDark) RgbEmerald else Color(0xFF047857),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Compact Dynamic RGB Chip for prominent toolbars & hero action strips.
+ */
+@Composable
+fun DynamicRgbChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = Icons.Default.EditNote,
+    badgeText: String? = null,
+    testTag: String = "dynamic_rgb_chip"
+) {
+    DynamicRgbActionButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        icon = icon,
+        badgeText = badgeText,
+        height = 36.dp,
+        testTag = testTag
+    )
 }
 
 /**

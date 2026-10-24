@@ -92,6 +92,7 @@ import com.example.data.local.ScannedDocumentEntity
 import com.example.domain.model.AppThemeMode
 import com.example.domain.model.DocumentCategory
 import com.example.domain.model.SortOption
+import com.example.ui.theme.DynamicRgbActionButton
 import com.example.ui.theme.FrostedGlassCard
 import com.example.ui.theme.GlassActionButton
 import com.example.ui.theme.GlassScreenBackground
@@ -411,10 +412,10 @@ fun LibraryScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            GlassActionButton(
-                                text = "Open PDF Studio",
+                            DynamicRgbActionButton(
+                                text = "PDF Studio",
                                 icon = Icons.Default.EditNote,
-                                isPrimary = true,
+                                badgeText = "RGB",
                                 height = 42.dp,
                                 onClick = {
                                     if (documents.size == 1) {
