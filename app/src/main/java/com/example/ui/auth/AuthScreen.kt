@@ -293,13 +293,29 @@ fun AuthScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "PDF Scanner • B&W Crop • Offline OCR",
+                        text = "FREE Direct PDF Editor • B&W Scanner • Share Pictures",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Surface(
+                        color = ElectricTeal.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "★ FREE DIRECT PDF EDITOR • Change Names, Letters & Comments Instantly",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Compact 3-pill feature row
                     Row(
@@ -307,18 +323,18 @@ fun AuthScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         MiniFeatureBadge(
+                            icon = Icons.Default.PictureAsPdf,
+                            label = "Edit PDF Free",
+                            modifier = Modifier.weight(1f)
+                        )
+                        MiniFeatureBadge(
                             icon = Icons.Default.DocumentScanner,
                             label = "B&W Crop",
                             modifier = Modifier.weight(1f)
                         )
                         MiniFeatureBadge(
                             icon = Icons.Default.Translate,
-                            label = "OCR Text",
-                            modifier = Modifier.weight(1f)
-                        )
-                        MiniFeatureBadge(
-                            icon = Icons.Default.PictureAsPdf,
-                            label = "PDF Tools",
+                            label = "Share Status",
                             modifier = Modifier.weight(1f)
                         )
                     }

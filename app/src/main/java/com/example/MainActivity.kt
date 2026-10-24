@@ -65,6 +65,7 @@ import com.example.ui.auth.authStateFlow
 import com.example.ui.auth.signOutUser
 import com.example.ui.screens.AppLockGateScreen
 import com.example.ui.screens.CameraAndEdgeScreen
+import com.example.ui.screens.DirectPdfEditorScreen
 import com.example.ui.screens.DocumentDetailScreen
 import com.example.ui.screens.EnhanceAndOcrScreen
 import com.example.ui.screens.LibraryScreen
@@ -80,7 +81,11 @@ import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.ui.viewmodel.ScannerCaptureMode
 import com.example.utils.LocalHaptics
 import com.google.firebase.auth.FirebaseAuth
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
@@ -102,14 +107,25 @@ object SettingsRoute
 @Serializable
 data class DocumentDetailRoute(val documentId: String)
 
+@Serializable
+data class DirectPdfEditorRoute(val documentId: String, val initialPageIndex: Int = 0)
+
 class MainActivity : FragmentActivity() {
 
     private lateinit var appContainer: AppContainer
+    private val pendingIncomingIntent = MutableStateFlow<Intent?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         appContainer = AppContainer(applicationContext)
+
+        if (savedInstanceState == null && intent != null) {
+            val act = intent.action
+            if (act == Intent.ACTION_SEND || act == Intent.ACTION_SEND_MULTIPLE || act == Intent.ACTION_VIEW) {
+                pendingIncomingIntent.value = intent
+            }
+        }
 
         setContent {
             val scope = rememberCoroutineScope()
@@ -117,6 +133,14 @@ class MainActivity : FragmentActivity() {
                 .collectAsStateWithLifecycle(initialValue = FirebaseAuth.getInstance().currentUser)
             val rootSettings by appContainer.settingsRepository.settingsFlow
                 .collectAsStateWithLifecycle(initialValue = UserSettings())
+            val incomingIntent by pendingIncomingIntent.collectAsStateWithLifecycle()
+
+            // If user shares an image or PDF from another app while in unauthenticated state, automatically enable Guest Mode so it opens immediately
+            LaunchedEffect(incomingIntent) {
+                if (incomingIntent != null && currentUser == null && !rootSettings.isGuestMode) {
+                    appContainer.settingsRepository.setGuestMode(true)
+                }
+            }
 
             DocuScanTheme(themeMode = rootSettings.themeMode) {
                 val isDark = LocalIsDarkGlass.current
@@ -159,16 +183,52 @@ class MainActivity : FragmentActivity() {
                             onUnlocked = { viewModel.markAppUnlocked() }
                         )
                     } else {
-                        DocuScanMainShell(viewModel = viewModel)
+                        DocuScanMainShell(
+                            viewModel = viewModel,
+                            incomingShareIntent = incomingIntent,
+                            onConsumeIncomingIntent = { pendingIncomingIntent.value = null }
+                        )
                     }
                 }
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val act = intent.action
+        if (act == Intent.ACTION_SEND || act == Intent.ACTION_SEND_MULTIPLE || act == Intent.ACTION_VIEW) {
+            pendingIncomingIntent.value = intent
+        }
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun extractSingleUriFromIntent(intent: Intent): Uri? {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) ?: intent.data
+    } else {
+        (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri) ?: intent.data
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun extractMultipleUrisFromIntent(intent: Intent): List<Uri> {
+    val list = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+        intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+    }
+    return list?.filterNotNull() ?: emptyList()
 }
 
 @Composable
-fun DocuScanMainShell(viewModel: DocuScanViewModel) {
+fun DocuScanMainShell(
+    viewModel: DocuScanViewModel,
+    incomingShareIntent: Intent? = null,
+    onConsumeIncomingIntent: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = LocalHaptics.current
@@ -179,6 +239,71 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
 
     val scanSession by viewModel.scanSession.collectAsStateWithLifecycle()
     val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
+
+    // Handle incoming shared Picture(s) or PDF from other apps (Gallery, WhatsApp, Files, etc.)
+    LaunchedEffect(incomingShareIntent) {
+        val intent = incomingShareIntent ?: return@LaunchedEffect
+        val action = intent.action
+        val mime = intent.type ?: ""
+        onConsumeIncomingIntent()
+
+        when (action) {
+            Intent.ACTION_SEND -> {
+                val uri = extractSingleUriFromIntent(intent) ?: return@LaunchedEffect
+                if (mime.contains("pdf", ignoreCase = true) || uri.toString().endsWith(".pdf", ignoreCase = true)) {
+                    viewModel.importExternalPdf(
+                        uri = uri,
+                        title = "Shared_PDF_${System.currentTimeMillis() / 1000}",
+                        onImported = { docId ->
+                            navController.navigate(DirectPdfEditorRoute(docId, 0))
+                        }
+                    )
+                } else {
+                    viewModel.importImagesForDirectPdfEditor(
+                        uris = listOf(uri),
+                        defaultTitle = "Shared_Doc_${System.currentTimeMillis() / 1000}",
+                        onCreated = { docId ->
+                            navController.navigate(DirectPdfEditorRoute(docId, 0))
+                        }
+                    )
+                }
+            }
+
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val uris = extractMultipleUrisFromIntent(intent)
+                if (uris.isNotEmpty()) {
+                    viewModel.importImagesForDirectPdfEditor(
+                        uris = uris,
+                        defaultTitle = "Shared_Pages_${System.currentTimeMillis() / 1000}",
+                        onCreated = { docId ->
+                            navController.navigate(DirectPdfEditorRoute(docId, 0))
+                        }
+                    )
+                }
+            }
+
+            Intent.ACTION_VIEW -> {
+                val uri = intent.data ?: extractSingleUriFromIntent(intent) ?: return@LaunchedEffect
+                if (mime.contains("pdf", ignoreCase = true) || uri.toString().endsWith(".pdf", ignoreCase = true)) {
+                    viewModel.importExternalPdf(
+                        uri = uri,
+                        title = "Opened_PDF_${System.currentTimeMillis() / 1000}",
+                        onImported = { docId ->
+                            navController.navigate(DirectPdfEditorRoute(docId, 0))
+                        }
+                    )
+                } else {
+                    viewModel.importImagesForDirectPdfEditor(
+                        uris = listOf(uri),
+                        defaultTitle = "Opened_Image_${System.currentTimeMillis() / 1000}",
+                        onCreated = { docId ->
+                            navController.navigate(DirectPdfEditorRoute(docId, 0))
+                        }
+                    )
+                }
+            }
+        }
+    }
 
     // 4-Tab HorizontalPager state: 0 = Library, 1 = Scan, 2 = Tools, 3 = Settings
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
@@ -286,6 +411,9 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                                 },
                                 onOpenDocument = { docId ->
                                     navController.navigate(DocumentDetailRoute(docId))
+                                },
+                                onOpenDirectPdfEditor = { docId, pageIdx ->
+                                    navController.navigate(DirectPdfEditorRoute(docId, pageIdx))
                                 }
                             )
 
@@ -305,6 +433,9 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                                 viewModel = viewModel,
                                 onOpenDocument = { docId ->
                                     navController.navigate(DocumentDetailRoute(docId))
+                                },
+                                onOpenDirectPdfEditor = { docId, pageIdx ->
+                                    navController.navigate(DirectPdfEditorRoute(docId, pageIdx))
                                 },
                                 onStartSpecializedScan = { mode ->
                                     viewModel.startNewScanSession(mode)
@@ -371,6 +502,9 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                         onOpenDocument = { docId ->
                             navController.navigate(DocumentDetailRoute(docId))
                         },
+                        onOpenDirectPdfEditor = { docId, pageIdx ->
+                            navController.navigate(DirectPdfEditorRoute(docId, pageIdx))
+                        },
                         onStartSpecializedScan = { mode ->
                             viewModel.startNewScanSession(mode)
                             switchToPagerTab(1)
@@ -407,7 +541,25 @@ fun DocuScanMainShell(viewModel: DocuScanViewModel) {
                     DocumentDetailScreen(
                         documentId = route.documentId,
                         viewModel = viewModel,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onOpenDirectPdfEditor = { pageIdx ->
+                            navController.navigate(DirectPdfEditorRoute(route.documentId, pageIdx))
+                        }
+                    )
+                }
+
+                composable<DirectPdfEditorRoute> { backStackEntry ->
+                    val route = backStackEntry.toRoute<DirectPdfEditorRoute>()
+                    DirectPdfEditorScreen(
+                        documentId = route.documentId,
+                        initialPageIndex = route.initialPageIndex,
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                        onSwitchDocument = { newDocId ->
+                            navController.navigate(DirectPdfEditorRoute(newDocId, 0)) {
+                                popUpTo<DirectPdfEditorRoute> { inclusive = true }
+                            }
+                        }
                     )
                 }
             }

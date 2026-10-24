@@ -380,7 +380,7 @@ fun GlassActionButton(
                 onClick()
             },
             shape = shape,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (isDark) Color(0xFF0A84FF) else RoyalBlue,
                 contentColor = Color.White
@@ -392,9 +392,9 @@ fun GlassActionButton(
                     imageVector = icon,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(5.dp))
             }
             Text(
                 text = text,
@@ -402,6 +402,7 @@ fun GlassActionButton(
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -457,7 +458,7 @@ fun GlassActionButton(
                     haptics.click()
                     onClick()
                 }
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(
@@ -469,9 +470,9 @@ fun GlassActionButton(
                         imageVector = icon,
                         contentDescription = null,
                         tint = iconColor,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                 }
                 Text(
                     text = text,
@@ -479,6 +480,7 @@ fun GlassActionButton(
                     fontWeight = FontWeight.SemiBold,
                     color = labelColor,
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
             }

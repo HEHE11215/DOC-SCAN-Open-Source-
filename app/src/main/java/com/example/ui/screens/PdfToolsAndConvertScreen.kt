@@ -74,8 +74,15 @@ import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.ui.viewmodel.ScannerCaptureMode
 import com.example.utils.ShareExportHelper
 
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.graphics.Color
+import com.example.ui.theme.GlassActionButton
+
 private enum class ActivePdfToolDialog {
     NONE,
+    PICK_DOC_FOR_DIRECT_EDIT,
+    PICK_DOC_FOR_SHARE_PICTURE,
     MERGE_PDF,
     SPLIT_PDF,
     TEXT_TO_PDF,
@@ -94,6 +101,7 @@ private enum class ActivePdfToolDialog {
 fun PdfToolsAndConvertScreen(
     viewModel: DocuScanViewModel,
     onOpenDocument: (String) -> Unit,
+    onOpenDirectPdfEditor: (String, Int) -> Unit = { _, _ -> },
     onStartSpecializedScan: (ScannerCaptureMode) -> Unit,
     onNavigateToCrop: () -> Unit,
     onNavigateToEnhance: () -> Unit
@@ -118,7 +126,23 @@ fun PdfToolsAndConvertScreen(
             viewModel.importExternalPdf(
                 uri = uri,
                 title = "PDF_${System.currentTimeMillis() / 1000}",
-                onImported = onOpenDocument
+                onImported = { docId ->
+                    onOpenDirectPdfEditor(docId, 0)
+                }
+            )
+        }
+    }
+
+    val directEditImagesPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 15)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.importImagesForDirectPdfEditor(
+                uris = uris,
+                defaultTitle = "Edited_Letter_${System.currentTimeMillis() / 1000}",
+                onCreated = { docId ->
+                    onOpenDirectPdfEditor(docId, 0)
+                }
             )
         }
     }
@@ -177,6 +201,100 @@ fun PdfToolsAndConvertScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // FLAGSHIP PROMINENT FEATURE CARD: FREE Direct PDF Editor
+                    item {
+                        FrostedGlassCard(
+                            cornerRadius = 22.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("tools_flagship_direct_pdf_editor_card")
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(42.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.EditNote,
+                                            contentDescription = "Direct PDF Editor",
+                                            tint = Color.White,
+                                            modifier = Modifier.padding(9.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Direct PDF Editor",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFF10B981)
+                                            ) {
+                                                Text(
+                                                    text = "100% FREE",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Color.White,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = "Edit Books, Letters, Names & Comments directly on the main PDF without any external software. Save PDF or Share Picture to Status!",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    GlassActionButton(
+                                        text = "Open PDF Studio",
+                                        icon = Icons.Default.EditNote,
+                                        isPrimary = true,
+                                        height = 44.dp,
+                                        onClick = {
+                                            if (allDocs.size == 1) {
+                                                onOpenDirectPdfEditor(allDocs.first().id, 0)
+                                            } else {
+                                                activeDialog = ActivePdfToolDialog.PICK_DOC_FOR_DIRECT_EDIT
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .weight(1.15f)
+                                            .testTag("tool_direct_pdf_editor_button")
+                                    )
+                                    GlassActionButton(
+                                        text = "Import PDF File",
+                                        icon = Icons.Default.FileUpload,
+                                        isPrimary = false,
+                                        height = 44.dp,
+                                        onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         Text(
                             text = "Edit & Protect",
@@ -186,6 +304,24 @@ fun PdfToolsAndConvertScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                ToolActionCard(
+                                    title = "Direct Edit PDF",
+                                    subtitle = "Change Name & Text",
+                                    icon = Icons.Default.EditNote,
+                                    testTag = "tool_grid_direct_edit_pdf",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { activeDialog = ActivePdfToolDialog.PICK_DOC_FOR_DIRECT_EDIT }
+                                )
+                                ToolActionCard(
+                                    title = "Share Picture",
+                                    subtitle = "Status / WhatsApp",
+                                    icon = Icons.Default.Share,
+                                    testTag = "tool_share_picture_status",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { activeDialog = ActivePdfToolDialog.PICK_DOC_FOR_SHARE_PICTURE }
+                                )
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 ToolActionCard(
                                     title = "B&W PDF",
@@ -269,7 +405,7 @@ fun PdfToolsAndConvertScreen(
                                 )
                                 ToolActionCard(
                                     title = "Import PDF",
-                                    subtitle = "Open & OCR",
+                                    subtitle = "Open & Direct Edit",
                                     icon = Icons.Default.FileUpload,
                                     testTag = "tool_import_pdf",
                                     modifier = Modifier.weight(1f),
@@ -371,6 +507,30 @@ fun PdfToolsAndConvertScreen(
 
     when (activeDialog) {
         ActivePdfToolDialog.NONE -> Unit
+
+        ActivePdfToolDialog.PICK_DOC_FOR_DIRECT_EDIT -> {
+            PickSingleDocumentDialog(
+                title = "Direct PDF Editor (FREE)",
+                documents = allDocs,
+                onDismiss = { activeDialog = ActivePdfToolDialog.NONE },
+                onSelected = { doc ->
+                    activeDialog = ActivePdfToolDialog.NONE
+                    onOpenDirectPdfEditor(doc.id, 0)
+                }
+            )
+        }
+
+        ActivePdfToolDialog.PICK_DOC_FOR_SHARE_PICTURE -> {
+            PickSingleDocumentDialog(
+                title = "Share Document as Picture (Status / Apps)",
+                documents = allDocs,
+                onDismiss = { activeDialog = ActivePdfToolDialog.NONE },
+                onSelected = { doc ->
+                    activeDialog = ActivePdfToolDialog.NONE
+                    viewModel.shareDocumentPageAsPicture(doc, 0)
+                }
+            )
+        }
 
         ActivePdfToolDialog.PICK_DOC_FOR_BW -> {
             PickSingleDocumentDialog(

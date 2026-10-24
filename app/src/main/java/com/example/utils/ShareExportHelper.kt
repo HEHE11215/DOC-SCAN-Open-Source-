@@ -46,6 +46,26 @@ object ShareExportHelper {
         shareFile(context, pdfFile, "application/pdf", title)
     }
 
+    fun shareImageFile(context: Context, imageFile: File, title: String = "Share Picture (Status / App)") {
+        if (!imageFile.exists()) return
+        val mime = if (imageFile.name.endsWith(".png", ignoreCase = true)) "image/png" else "image/jpeg"
+        shareFile(context, imageFile, mime, title)
+    }
+
+    fun shareBitmapAsJpg(
+        context: Context,
+        bitmap: android.graphics.Bitmap,
+        fileNameWithoutExt: String = "DocScan_Page"
+    ) {
+        val clean = fileNameWithoutExt.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").ifBlank { "DocScan_Page" }
+        val outDir = File(context.cacheDir, "shared_images").apply { mkdirs() }
+        val file = File(outDir, "$clean.jpg")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, out)
+        }
+        shareImageFile(context, file, "Share Picture to Status / Apps")
+    }
+
     fun shareTextFile(context: Context, txtFile: File, title: String = "Share Text File") {
         shareFile(context, txtFile, "text/plain", title)
     }

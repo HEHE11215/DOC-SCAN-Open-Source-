@@ -1132,9 +1132,112 @@ class DocuScanViewModel(
             )
             if (files.isNotEmpty()) {
                 val mime = if (asPng) "image/png" else "image/jpeg"
-                ShareExportHelper.shareMultipleFiles(appContext, files, mime, "Export ${files.size} Page Image(s)")
+                ShareExportHelper.shareMultipleFiles(appContext, files, mime, "Share ${files.size} Picture(s) (Status / Apps)")
             } else {
                 showStatus("Could not render PDF images")
+            }
+        }
+    }
+
+    /**
+     * 1-tap shares the document's page as a high-resolution JPG picture (e.g. for WhatsApp Status, Instagram, Chat, or Gallery).
+     */
+    fun shareDocumentPageAsPicture(doc: ScannedDocumentEntity, pageIndex: Int = 0) {
+        viewModelScope.launch {
+            val pages = documentRepository.getPagesForDocument(doc.id).sortedBy { it.pageIndex }
+            val targetPath = pages.getOrNull(pageIndex)?.processedImagePath ?: doc.thumbnailPath
+            val pageFile = File(targetPath)
+            if (pageFile.exists()) {
+                ShareExportHelper.shareImageFile(
+                    context = appContext,
+                    imageFile = pageFile,
+                    title = "Share \"${doc.title}\" as Picture"
+                )
+            } else {
+                exportDocumentAsImages(doc, asPng = false)
+            }
+        }
+    }
+
+    /**
+     * Imports 1 or more images directly into a saved editable PDF document with OCR blocks
+     * and opens it immediately in the Direct PDF Editor.
+     */
+    fun importImagesForDirectPdfEditor(
+        uris: List<Uri>,
+        defaultTitle: String = "Editable_Doc_${System.currentTimeMillis() / 1000}",
+        onCreated: (String) -> Unit
+    ) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            _scanSession.update {
+                it.copy(isProcessing = true, processingMessage = "Preparing document for Direct PDF Editor...")
+            }
+            val drafts = mutableListOf<DraftScannedPage>()
+            for (uri in uris) {
+                val rawBmp = ImageProcessor.loadBitmapFromUri(appContext, uri) ?: continue
+                val ocr = OcrAndBarcodeEngine.recognizeText(rawBmp, settings.value.defaultOcrScript)
+                drafts.add(
+                    DraftScannedPage(
+                        originalBitmap = rawBmp,
+                        croppedBitmap = rawBmp,
+                        enhancedBitmap = rawBmp,
+                        filter = ScanFilter.ORIGINAL,
+                        ocrText = ocr.fullText,
+                        ocrBlocks = ocr.blocks
+                    )
+                )
+            }
+            if (drafts.isEmpty()) {
+                _scanSession.update { it.copy(isProcessing = false, processingMessage = "") }
+                showStatus("Could not load selected picture(s)")
+                return@launch
+            }
+            val savedDoc = documentRepository.saveDraftDocument(
+                title = defaultTitle.ifBlank { "Editable Document" },
+                category = DocumentCategory.IMPORTED.label,
+                pages = drafts,
+                pageSize = PdfPageSize.A4,
+                quality = PdfQuality.HIGH,
+                isSearchable = true
+            )
+            _scanSession.update { it.copy(isProcessing = false, processingMessage = "") }
+            showStatus("Opened \"${savedDoc.title}\" in Direct PDF Editor!")
+            onCreated(savedDoc.id)
+        }
+    }
+
+    /**
+     * Saves direct on-page edits (replaced names, letter text, comments, highlights, whiteout)
+     * directly into the main PDF file and optionally invokes onComplete with the updated document.
+     */
+    fun saveDirectEditedPageToDocument(
+        docId: String,
+        pageIndex: Int,
+        editedBitmap: Bitmap,
+        newTitle: String? = null,
+        updatedPageOcrText: String? = null,
+        updatedBlocks: List<com.example.domain.model.OcrBlockItem>? = null,
+        onComplete: (ScannedDocumentEntity) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            _scanSession.update {
+                it.copy(isProcessing = true, processingMessage = "Saving changes directly to main PDF...")
+            }
+            val updatedDoc = documentRepository.saveDirectEditedPage(
+                docId = docId,
+                pageIndex = pageIndex,
+                editedBitmap = editedBitmap,
+                newTitle = newTitle,
+                updatedPageOcrText = updatedPageOcrText,
+                updatedBlocks = updatedBlocks
+            )
+            _scanSession.update { it.copy(isProcessing = false, processingMessage = "") }
+            if (updatedDoc != null) {
+                showStatus("Saved edits directly to \"${updatedDoc.title}\".pdf!")
+                onComplete(updatedDoc)
+            } else {
+                showStatus("Could not save changes to PDF")
             }
         }
     }

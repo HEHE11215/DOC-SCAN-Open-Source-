@@ -56,18 +56,80 @@ object OcrAndBarcodeEngine {
             val image = InputImage.fromBitmap(bitmap, 0)
             val visionText = recognizer.process(image).await()
 
-            val blocks = visionText.textBlocks.mapNotNull { block ->
-                val rect = block.boundingBox ?: return@mapNotNull null
-                val rawText = block.text.trim()
-                if (rawText.isEmpty()) return@mapNotNull null
-                OcrBlockItem(
-                    text = rawText,
-                    leftRatio = (rect.left / w).coerceIn(0f, 1f),
-                    topRatio = (rect.top / h).coerceIn(0f, 1f),
-                    rightRatio = (rect.right / w).coerceIn(0f, 1f),
-                    bottomRatio = (rect.bottom / h).coerceIn(0f, 1f),
-                    confidence = 0.94f
-                )
+            val blocks = mutableListOf<OcrBlockItem>()
+            for (block in visionText.textBlocks) {
+                for (line in block.lines) {
+                    val elements = line.elements
+                    if (elements.size > 1) {
+                        // Split wide horizontal gaps (e.g., left column vs right column on invoices/letters)
+                        var segText = StringBuilder()
+                        var segLeft = Int.MAX_VALUE
+                        var segTop = Int.MAX_VALUE
+                        var segRight = Int.MIN_VALUE
+                        var segBottom = Int.MIN_VALUE
+                        var prevRight = -1
+
+                        for (el in elements) {
+                            val box = el.boundingBox ?: continue
+                            val word = el.text.trim()
+                            if (word.isEmpty()) continue
+                            val gap = if (prevRight >= 0) box.left - prevRight else 0
+                            if (prevRight >= 0 && gap > (w * 0.055f)) {
+                                if (segText.isNotEmpty() && segRight > segLeft) {
+                                    blocks.add(
+                                        OcrBlockItem(
+                                            text = segText.toString().trim(),
+                                            leftRatio = (segLeft / w).coerceIn(0f, 1f),
+                                            topRatio = (segTop / h).coerceIn(0f, 1f),
+                                            rightRatio = (segRight / w).coerceIn(0f, 1f),
+                                            bottomRatio = (segBottom / h).coerceIn(0f, 1f),
+                                            confidence = 0.96f
+                                        )
+                                    )
+                                }
+                                segText = StringBuilder(word)
+                                segLeft = box.left
+                                segTop = box.top
+                                segRight = box.right
+                                segBottom = box.bottom
+                            } else {
+                                if (segText.isNotEmpty()) segText.append(" ")
+                                segText.append(word)
+                                segLeft = min(segLeft, box.left)
+                                segTop = min(segTop, box.top)
+                                segRight = max(segRight, box.right)
+                                segBottom = max(segBottom, box.bottom)
+                            }
+                            prevRight = box.right
+                        }
+                        if (segText.isNotEmpty() && segRight > segLeft) {
+                            blocks.add(
+                                OcrBlockItem(
+                                    text = segText.toString().trim(),
+                                    leftRatio = (segLeft / w).coerceIn(0f, 1f),
+                                    topRatio = (segTop / h).coerceIn(0f, 1f),
+                                    rightRatio = (segRight / w).coerceIn(0f, 1f),
+                                    bottomRatio = (segBottom / h).coerceIn(0f, 1f),
+                                    confidence = 0.96f
+                                )
+                            )
+                        }
+                    } else {
+                        val rect = line.boundingBox ?: continue
+                        val rawText = line.text.trim()
+                        if (rawText.isEmpty()) continue
+                        blocks.add(
+                            OcrBlockItem(
+                                text = rawText,
+                                leftRatio = (rect.left / w).coerceIn(0f, 1f),
+                                topRatio = (rect.top / h).coerceIn(0f, 1f),
+                                rightRatio = (rect.right / w).coerceIn(0f, 1f),
+                                bottomRatio = (rect.bottom / h).coerceIn(0f, 1f),
+                                confidence = 0.95f
+                            )
+                        )
+                    }
+                }
             }
 
             if (script == OcrScript.URDU_ARABIC) {
@@ -107,6 +169,29 @@ object OcrAndBarcodeEngine {
             runCatching { recognizer.close() }
         }
     }
+
+    /**
+     * Exact pixel-matched text line and column regions for the built-in starter sample invoice
+     * (1000x1414 generated in ImageProcessor.generateSampleInvoiceBitmap) so every single field,
+     * company name, invoice number, date, line item, price, and signature is individually editable in place.
+     */
+    fun getExactSampleInvoiceBlocks(): List<OcrBlockItem> = listOf(
+        OcrBlockItem("APEX CLOUD SYSTEMS INC.", 0.068f, 0.076f, 0.665f, 0.112f, 0.99f),
+        OcrBlockItem("INVOICE #INV-2026-0842  •  DATE: OCT 21, 2026", 0.068f, 0.123f, 0.685f, 0.147f, 0.99f),
+        OcrBlockItem("Bill To: Horizon Design Studio, 740 Market St, San Francisco, CA", 0.068f, 0.162f, 0.865f, 0.186f, 0.99f),
+        OcrBlockItem("DESCRIPTION", 0.068f, 0.228f, 0.285f, 0.254f, 0.99f),
+        OcrBlockItem("AMOUNT", 0.756f, 0.228f, 0.905f, 0.254f, 0.99f),
+        OcrBlockItem("1. Enterprise OCR & Document Pipeline License (Annual)", 0.068f, 0.292f, 0.730f, 0.317f, 0.99f),
+        OcrBlockItem("$1,200.00", 0.756f, 0.292f, 0.900f, 0.317f, 0.99f),
+        OcrBlockItem("2. Cloud Vault Multi-Device Encrypted Sync (5 Seats)", 0.068f, 0.342f, 0.715f, 0.367f, 0.99f),
+        OcrBlockItem("$450.00", 0.756f, 0.342f, 0.880f, 0.367f, 0.99f),
+        OcrBlockItem("3. High-Precision PDF Archival Module", 0.068f, 0.391f, 0.560f, 0.416f, 0.99f),
+        OcrBlockItem("$290.00", 0.756f, 0.391f, 0.880f, 0.416f, 0.99f),
+        OcrBlockItem("TOTAL DUE (USD):", 0.496f, 0.485f, 0.748f, 0.512f, 0.99f),
+        OcrBlockItem("$1,940.00", 0.756f, 0.476f, 0.950f, 0.514f, 0.99f),
+        OcrBlockItem("Payment Terms: Net 30 • Status: PAID IN FULL", 0.068f, 0.567f, 0.685f, 0.593f, 0.99f),
+        OcrBlockItem("Authorized Signature: A. Vance, VP Finance", 0.068f, 0.617f, 0.620f, 0.643f, 0.99f)
+    )
 
     /**
      * Offline horizontal projection profile text-line detector for Urdu/Arabic/RTL script regions.

@@ -118,6 +118,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.ScannedPageEntity
@@ -138,12 +139,15 @@ import com.example.utils.ShareExportHelper
 import kotlinx.coroutines.launch
 import java.io.File
 
+import androidx.compose.material.icons.filled.EditNote
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocumentDetailScreen(
     documentId: String,
     viewModel: DocuScanViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenDirectPdfEditor: (Int) -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
 
@@ -262,28 +266,82 @@ fun DocumentDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back_button")) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .testTag("detail_back_button")
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = currentDoc.title,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${currentDoc.pageCount} page(s) • ${ShareExportHelper.formatFileSize(currentDoc.fileSizeBytes)} • ${currentDoc.pageSize}",
+                            text = "${currentDoc.pageCount}p • ${ShareExportHelper.formatFileSize(currentDoc.fileSizeBytes)} • ${currentDoc.pageSize}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     if (!isLocked) {
-                        Row {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Surface(
+                                onClick = { onOpenDirectPdfEditor(0) },
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.testTag("detail_direct_edit_pdf_button")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.EditNote,
+                                        contentDescription = "Direct Edit PDF",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "Edit PDF",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    viewModel.shareDocumentPageAsPicture(currentDoc, 0)
+                                },
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .testTag("share_picture_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.Image,
+                                    contentDescription = "Share Picture (Status)",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                             IconButton(
                                 onClick = {
                                     ShareExportHelper.sharePdfFile(
@@ -292,17 +350,29 @@ fun DocumentDetailScreen(
                                         title = currentDoc.title
                                     )
                                 },
-                                modifier = Modifier.testTag("share_pdf_button")
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .testTag("share_pdf_button")
                             ) {
-                                Icon(Icons.Default.Share, contentDescription = "Share PDF")
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = "Share PDF",
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                             IconButton(
                                 onClick = {
                                     savePdfLauncher.launch("${currentDoc.title.replace(" ", "_")}.pdf")
                                 },
-                                modifier = Modifier.testTag("export_pdf_saf_button")
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .testTag("export_pdf_saf_button")
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = "Save PDF to Device")
+                                Icon(
+                                    Icons.Default.Download,
+                                    contentDescription = "Save PDF to Device",
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -407,6 +477,7 @@ fun DocumentDetailScreen(
                         pages = pages,
                         viewModel = viewModel,
                         isSpeaking = isSpeaking,
+                        onOpenDirectPdfEditor = onOpenDirectPdfEditor,
                         onToggleReadAloud = { toggleReadAloud() },
                         onOpenStampDialog = { showStampDialog = true },
                         onOpenWatermarkDialog = { showWatermarkDialog = true },
@@ -573,6 +644,7 @@ private fun PdfPagesViewerTab(
     pages: List<ScannedPageEntity>,
     viewModel: DocuScanViewModel,
     isSpeaking: Boolean,
+    onOpenDirectPdfEditor: (Int) -> Unit,
     onToggleReadAloud: () -> Unit,
     onOpenStampDialog: () -> Unit,
     onOpenWatermarkDialog: () -> Unit,
@@ -580,6 +652,7 @@ private fun PdfPagesViewerTab(
     onOpenPasswordDialog: () -> Unit,
     onOpenCompressDialog: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var zoomScale by remember { mutableFloatStateOf(1f) }
@@ -602,7 +675,7 @@ private fun PdfPagesViewerTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Horizontal Action Strip with 1-tap Clear Scan, Convert to B&W, Sign, Watermark, Compress, Password
+        // Horizontal Action Strip with Direct PDF Editor (FREE), Share Picture (Status), Clear Scan, Convert to B&W, Sign, Stamp, etc.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -610,6 +683,25 @@ private fun PdfPagesViewerTab(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            AssistChip(
+                onClick = { onOpenDirectPdfEditor(0) },
+                label = { Text("Direct PDF Editor (FREE)", fontWeight = FontWeight.Bold) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.EditNote,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                modifier = Modifier.testTag("doc_direct_pdf_editor_chip")
+            )
+            AssistChip(
+                onClick = { viewModel.shareDocumentPageAsPicture(doc, 0) },
+                label = { Text("Share Picture (Status)") },
+                leadingIcon = { Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.testTag("doc_share_picture_chip")
+            )
             AssistChip(
                 onClick = { viewModel.convertDocumentFilter(doc.id, ScanFilter.CLEAR) },
                 label = { Text("Clear Scan") },
@@ -710,6 +802,7 @@ private fun PdfPagesViewerTab(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -717,10 +810,60 @@ private fun PdfPagesViewerTab(
                             Text(
                                 text = "Page ${index + 1} of ${renderedBitmaps.size}",
                                 style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(end = 10.dp)
                             )
                             if (pageEntity != null) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Surface(
+                                        onClick = { onOpenDirectPdfEditor(index) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.padding(end = 2.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.EditNote,
+                                                contentDescription = "Direct Edit Page",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                            Text(
+                                                text = "Edit Page",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            ShareExportHelper.shareBitmapAsJpg(
+                                                context = context,
+                                                bitmap = bitmap,
+                                                fileNameWithoutExt = "${doc.title}_Page_${index + 1}"
+                                            )
+                                        },
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Image,
+                                            contentDescription = "Share Page as Picture",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                     IconButton(
                                         onClick = {
                                             if (index > 0) {

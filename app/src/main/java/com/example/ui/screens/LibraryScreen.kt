@@ -107,12 +107,20 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Image
+
 @Composable
 fun LibraryScreen(
     viewModel: DocuScanViewModel,
     onLaunchScanner: (ScannerCaptureMode) -> Unit,
     onPickGalleryImages: () -> Unit,
-    onOpenDocument: (String) -> Unit
+    onOpenDocument: (String) -> Unit,
+    onOpenDirectPdfEditor: (String, Int) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val haptics = LocalHaptics.current
@@ -131,6 +139,35 @@ fun LibraryScreen(
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showMoveFolderDialog by remember { mutableStateOf(false) }
     var showMergeDialog by remember { mutableStateOf(false) }
+    var showPickDocForDirectEdit by remember { mutableStateOf(false) }
+
+    val directEditImagesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 15)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.importImagesForDirectPdfEditor(
+                uris = uris,
+                defaultTitle = "Edited_Doc_${System.currentTimeMillis() / 1000}",
+                onCreated = { newDocId ->
+                    onOpenDirectPdfEditor(newDocId, 0)
+                }
+            )
+        }
+    }
+
+    val directEditPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importExternalPdf(
+                uri = uri,
+                title = "Edited_PDF_${System.currentTimeMillis() / 1000}",
+                onImported = { newDocId ->
+                    onOpenDirectPdfEditor(newDocId, 0)
+                }
+            )
+        }
+    }
 
     GlassScreenBackground {
         Box(
@@ -221,7 +258,7 @@ fun LibraryScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -300,62 +337,157 @@ fun LibraryScreen(
                     }
                 }
 
-                // Adaptive 2x2 iOS Glass Action Panel (Strictly aligned on all screen sizes)
+                // PROMINENT FLAGSHIP FEATURE BANNER: FREE Direct PDF Editor (Edit Names, Letters, Books & Comments Directly)
                 FrostedGlassCard(
                     cornerRadius = 22.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .testTag("hero_direct_pdf_editor_banner")
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            GlassActionButton(
-                                text = "Scan",
-                                icon = Icons.Default.CameraAlt,
-                                isPrimary = true,
-                                onClick = { onLaunchScanner(ScannerCaptureMode.STANDARD_BATCH) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("hero_camera_scan_button")
-                            )
-                            GlassActionButton(
-                                text = "Import",
-                                icon = Icons.Default.PhotoLibrary,
-                                isPrimary = false,
-                                onClick = onPickGalleryImages,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("hero_import_images_button")
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.EditNote,
+                                        contentDescription = "Direct PDF Editor",
+                                        tint = Color.White,
+                                        modifier = Modifier.padding(6.dp)
+                                    )
+                                }
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Direct PDF Editor",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFF10B981)
+                                        ) {
+                                            Text(
+                                                text = "FREE • NO PC NEEDED",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "Change Names, Letters, Books & Comments directly on main PDF & Share to Status",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             GlassActionButton(
-                                text = "ID Card",
-                                icon = Icons.Default.Badge,
-                                isPrimary = false,
-                                onClick = { onLaunchScanner(ScannerCaptureMode.ID_CARD) },
-                                modifier = Modifier.weight(1f)
+                                text = "Open PDF Studio",
+                                icon = Icons.Default.EditNote,
+                                isPrimary = true,
+                                height = 42.dp,
+                                onClick = {
+                                    if (documents.size == 1) {
+                                        onOpenDirectPdfEditor(documents.first().id, 0)
+                                    } else if (documents.isNotEmpty()) {
+                                        showPickDocForDirectEdit = true
+                                    } else {
+                                        directEditPdfLauncher.launch(arrayOf("application/pdf"))
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1.15f)
+                                    .testTag("hero_direct_edit_pdf_button")
                             )
                             GlassActionButton(
-                                text = "QR Code",
-                                icon = Icons.Default.QrCodeScanner,
+                                text = "Import PDF File",
+                                icon = Icons.Default.FileUpload,
                                 isPrimary = false,
-                                onClick = { onLaunchScanner(ScannerCaptureMode.QR_BARCODE) },
-                                modifier = Modifier.weight(1f)
+                                height = 42.dp,
+                                onClick = {
+                                    directEditPdfLauncher.launch(arrayOf("application/pdf"))
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("hero_direct_open_pdf_button")
                             )
                         }
                     }
+                }
+
+                // Compact Quick Scanner Row: Scan, Import, ID Card, QR Code
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    GlassActionButton(
+                        text = "Scan",
+                        icon = Icons.Default.CameraAlt,
+                        isPrimary = true,
+                        height = 42.dp,
+                        onClick = { onLaunchScanner(ScannerCaptureMode.STANDARD_BATCH) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("hero_camera_scan_button")
+                    )
+                    GlassActionButton(
+                        text = "Import",
+                        icon = Icons.Default.PhotoLibrary,
+                        isPrimary = false,
+                        height = 42.dp,
+                        onClick = onPickGalleryImages,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("hero_import_images_button")
+                    )
+                    GlassActionButton(
+                        text = "ID Card",
+                        icon = Icons.Default.Badge,
+                        isPrimary = false,
+                        height = 42.dp,
+                        onClick = { onLaunchScanner(ScannerCaptureMode.ID_CARD) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    GlassActionButton(
+                        text = "QR",
+                        icon = Icons.Default.QrCodeScanner,
+                        isPrimary = false,
+                        height = 42.dp,
+                        onClick = { onLaunchScanner(ScannerCaptureMode.QR_BARCODE) },
+                        modifier = Modifier.weight(0.85f)
+                    )
                 }
 
                 // Full-Width Single-Line iOS Glass Search Bar
@@ -403,7 +535,7 @@ fun LibraryScreen(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
                         .testTag("library_search_input")
                 )
 
@@ -491,18 +623,25 @@ fun LibraryScreen(
                                     haptics.heavy()
                                     viewModel.toggleDocSelection(doc.id)
                                 },
+                                onDirectEditPdf = {
+                                    haptics.click()
+                                    onOpenDirectPdfEditor(doc.id, 0)
+                                },
                                 onToggleFavorite = {
                                     haptics.tick()
                                     viewModel.toggleFavorite(doc)
                                 },
                                 onRename = { newTitle -> viewModel.renameDocument(doc, newTitle) },
                                 onDelete = { viewModel.deleteDocument(doc.id) },
-                                onShare = {
+                                onSharePdf = {
                                     ShareExportHelper.sharePdfFile(
                                         context = context,
                                         pdfFile = File(doc.pdfFilePath),
                                         title = doc.title
                                     )
+                                },
+                                onSharePicture = {
+                                    viewModel.shareDocumentPageAsPicture(doc, 0)
                                 }
                             )
                         }
@@ -529,18 +668,25 @@ fun LibraryScreen(
                                     haptics.heavy()
                                     viewModel.toggleDocSelection(doc.id)
                                 },
+                                onDirectEditPdf = {
+                                    haptics.click()
+                                    onOpenDirectPdfEditor(doc.id, 0)
+                                },
                                 onToggleFavorite = {
                                     haptics.tick()
                                     viewModel.toggleFavorite(doc)
                                 },
                                 onRename = { newTitle -> viewModel.renameDocument(doc, newTitle) },
                                 onDelete = { viewModel.deleteDocument(doc.id) },
-                                onShare = {
+                                onSharePdf = {
                                     ShareExportHelper.sharePdfFile(
                                         context = context,
                                         pdfFile = File(doc.pdfFilePath),
                                         title = doc.title
                                     )
+                                },
+                                onSharePicture = {
+                                    viewModel.shareDocumentPageAsPicture(doc, 0)
                                 }
                             )
                         }
@@ -564,6 +710,91 @@ fun LibraryScreen(
                     .testTag("fab_scan_document")
             )
         }
+    }
+
+    if (showPickDocForDirectEdit) {
+        AlertDialog(
+            onDismissRequest = { showPickDocForDirectEdit = false },
+            title = {
+                Text(
+                    text = "Direct PDF Editor (FREE)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Select a document below to directly change Names, Letter text, or Comments — or import a new Picture / PDF:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(documents, key = { it.id }) { itemDoc ->
+                            Surface(
+                                onClick = {
+                                    showPickDocForDirectEdit = false
+                                    onOpenDirectPdfEditor(itemDoc.id, 0)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = itemDoc.title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${itemDoc.pageCount}p • Tap to directly edit PDF",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Default.EditNote,
+                                        contentDescription = "Edit",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPickDocForDirectEdit = false
+                        directEditImagesLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                ) {
+                    Text("Import Picture to Edit")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPickDocForDirectEdit = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 
     if (showNewFolderDialog) {
@@ -629,10 +860,12 @@ private fun DocumentGridCard(
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onDirectEditPdf: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
-    onShare: () -> Unit
+    onSharePdf: () -> Unit,
+    onSharePicture: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -657,7 +890,7 @@ private fun DocumentGridCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp)
+                    .height(132.dp)
                     .background(Color.White)
             ) {
                 val context = LocalContext.current
@@ -735,7 +968,8 @@ private fun DocumentGridCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -753,7 +987,7 @@ private fun DocumentGridCard(
                     Box {
                         IconButton(
                             onClick = { showMenu = true },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(26.dp)
                         ) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(18.dp))
                         }
@@ -762,7 +996,37 @@ private fun DocumentGridCard(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Rename") },
+                                text = { Text("Direct Edit PDF (FREE)", fontWeight = FontWeight.Bold) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.EditNote,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onDirectEditPdf()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share Picture (Status / JPG)") },
+                                leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) },
+                                onClick = {
+                                    showMenu = false
+                                    onSharePicture()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share PDF") },
+                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                                onClick = {
+                                    showMenu = false
+                                    onSharePdf()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Rename Document") },
                                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                                 onClick = {
                                     showMenu = false
@@ -775,14 +1039,6 @@ private fun DocumentGridCard(
                                 onClick = {
                                     showMenu = false
                                     onToggleFavorite()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Share") },
-                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                                onClick = {
-                                    showMenu = false
-                                    onShare()
                                 }
                             )
                             DropdownMenuItem(
@@ -802,12 +1058,70 @@ private fun DocumentGridCard(
                         }
                     }
                 }
-                Text(
-                    text = dateFormat.format(Date(doc.createdAt)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
+
+                // Direct 1-Tap Action Strip on Grid Card: Edit PDF, Share Picture (Status), Share PDF
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Surface(
+                        onClick = onDirectEditPdf,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                        modifier = Modifier.testTag("grid_direct_edit_${doc.id}")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.EditNote,
+                                contentDescription = "Direct Edit PDF",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Edit PDF",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        IconButton(
+                            onClick = onSharePicture,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("grid_share_pic_${doc.id}")
+                        ) {
+                            Icon(
+                                Icons.Default.Image,
+                                contentDescription = "Share Picture to Status",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onSharePdf,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("grid_share_pdf_${doc.id}")
+                        ) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = "Share PDF",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -831,10 +1145,12 @@ private fun DocumentListRowCard(
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onDirectEditPdf: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
-    onShare: () -> Unit
+    onSharePdf: () -> Unit,
+    onSharePicture: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -859,7 +1175,7 @@ private fun DocumentListRowCard(
                 .fillMaxWidth()
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -891,12 +1207,16 @@ private fun DocumentListRowCard(
                 }
             }
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text(
                     text = doc.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
@@ -904,47 +1224,136 @@ private fun DocumentListRowCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
-            }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        onClick = onDirectEditPdf,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.EditNote,
+                                contentDescription = "Direct Edit PDF",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Edit PDF",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
 
-            IconButton(
-                onClick = onToggleFavorite,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = if (doc.isFavorite) Icons.Default.Star else Icons.Outlined.StarBorder,
-                    contentDescription = "Favorite",
-                    tint = if (doc.isFavorite) Color(0xFFFF9F0A) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
+                    Surface(
+                        onClick = onSharePdf,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.75f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = "Share PDF",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Share PDF",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onSharePicture,
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = "Share Picture",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
 
             Box {
                 IconButton(
                     onClick = { showMenu = true },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(19.dp))
                 }
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Rename") },
+                        text = { Text("Direct Edit PDF (FREE)", fontWeight = FontWeight.Bold) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.EditNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onDirectEditPdf()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Share Picture (Status / JPG)") },
+                        leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) },
+                        onClick = {
+                            showMenu = false
+                            onSharePicture()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Share PDF") },
+                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                        onClick = {
+                            showMenu = false
+                            onSharePdf()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (doc.isFavorite) "Unfavorite" else "Favorite") },
+                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) },
+                        onClick = {
+                            showMenu = false
+                            onToggleFavorite()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Rename Document") },
                         leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                         onClick = {
                             showMenu = false
                             showRenameDialog = true
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Share") },
-                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                        onClick = {
-                            showMenu = false
-                            onShare()
                         }
                     )
                     DropdownMenuItem(

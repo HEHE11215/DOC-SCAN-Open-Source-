@@ -88,12 +88,7 @@ class DocumentRepository(
                 Payment Terms: Net 30 • Status: PAID IN FULL
                 Authorized Signature: A. Vance, VP Finance
             """.trimIndent()
-            val sampleBlocks = listOf(
-                OcrBlockItem("APEX CLOUD SYSTEMS INC.", 0.07f, 0.08f, 0.68f, 0.12f),
-                OcrBlockItem("INVOICE #INV-2026-0842 • DATE: OCT 21, 2026", 0.07f, 0.13f, 0.72f, 0.16f),
-                OcrBlockItem("TOTAL DUE (USD): $1,940.00", 0.50f, 0.48f, 0.88f, 0.53f),
-                OcrBlockItem("Status: PAID IN FULL", 0.07f, 0.57f, 0.55f, 0.61f)
-            )
+            val sampleBlocks = OcrAndBarcodeEngine.getExactSampleInvoiceBlocks()
             val draft = DraftScannedPage(
                 originalBitmap = sampleBmp,
                 croppedBitmap = sampleBmp,
@@ -394,6 +389,46 @@ class DocumentRepository(
             )
         )
         rebuildDocumentPdf(docId)
+    }
+
+    /**
+     * Saves a directly edited page bitmap (with replaced names/text, comments, highlights, or whiteout)
+     * back to the document, updates its OCR text, OCR blocks & title, and rebuilds the main PDF file in-place.
+     */
+    suspend fun saveDirectEditedPage(
+        docId: String,
+        pageIndex: Int,
+        editedBitmap: Bitmap,
+        newTitle: String? = null,
+        updatedPageOcrText: String? = null,
+        updatedBlocks: List<OcrBlockItem>? = null
+    ): ScannedDocumentEntity? = withContext(Dispatchers.IO) {
+        val pages = documentDao.getPagesForDocument(docId).sortedBy { it.pageIndex }
+        val targetPage = pages.getOrNull(pageIndex) ?: pages.firstOrNull() ?: return@withContext null
+        val newFile = ImageProcessor.saveBitmapToInternalFile(
+            context = context,
+            bitmap = editedBitmap,
+            prefix = "direct_edit_${docId}_p${targetPage.pageIndex}_${System.currentTimeMillis() % 10000}",
+            quality = 96
+        )
+        val mergedOcr = updatedPageOcrText ?: targetPage.ocrText
+        val mergedBlocksJson = if (updatedBlocks != null) {
+            OcrAndBarcodeEngine.encodeBlocksToJson(updatedBlocks)
+        } else {
+            targetPage.ocrBlocksJson
+        }
+        documentDao.upsertPage(
+            targetPage.copy(
+                originalImagePath = newFile.absolutePath,
+                processedImagePath = newFile.absolutePath,
+                ocrText = mergedOcr,
+                ocrBlocksJson = mergedBlocksJson
+            )
+        )
+        rebuildDocumentPdf(
+            docId = docId,
+            newTitle = newTitle?.takeIf { it.isNotBlank() }
+        )
     }
 
     suspend fun applyFilterToSavedDocument(
