@@ -93,6 +93,8 @@ import com.example.domain.model.AppThemeMode
 import com.example.domain.model.DocumentCategory
 import com.example.domain.model.SortOption
 import com.example.ui.theme.DynamicRgbActionButton
+import com.example.ui.theme.DynamicRgbChip
+import com.example.ui.theme.DynamicRgbGlowCard
 import com.example.ui.theme.FrostedGlassCard
 import com.example.ui.theme.GlassActionButton
 import com.example.ui.theme.GlassScreenBackground
@@ -339,11 +341,11 @@ fun LibraryScreen(
                 }
 
                 // PROMINENT FLAGSHIP FEATURE BANNER: FREE Direct PDF Editor (Edit Names, Letters, Books & Comments Directly)
-                FrostedGlassCard(
+                DynamicRgbGlowCard(
                     cornerRadius = 22.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .padding(horizontal = 16.dp, vertical = 5.dp)
                         .testTag("hero_direct_pdf_editor_banner")
                 ) {
                     Column(
@@ -413,9 +415,9 @@ fun LibraryScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             DynamicRgbActionButton(
-                                text = "PDF Studio",
+                                text = "Edit PDF Studio",
                                 icon = Icons.Default.EditNote,
-                                badgeText = "RGB",
+                                badgeText = "LIVE",
                                 height = 42.dp,
                                 onClick = {
                                     if (documents.size == 1) {
@@ -427,11 +429,11 @@ fun LibraryScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .weight(1.15f)
+                                    .weight(1.18f)
                                     .testTag("hero_direct_edit_pdf_button")
                             )
                             GlassActionButton(
-                                text = "Import PDF File",
+                                text = "Import PDF",
                                 icon = Icons.Default.FileUpload,
                                 isPrimary = false,
                                 height = 42.dp,
@@ -439,7 +441,7 @@ fun LibraryScreen(
                                     directEditPdfLauncher.launch(arrayOf("application/pdf"))
                                 },
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .weight(0.95f)
                                     .testTag("hero_direct_open_pdf_button")
                             )
                         }
@@ -1066,33 +1068,13 @@ private fun DocumentGridCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Surface(
+                    DynamicRgbChip(
+                        text = "Edit PDF",
                         onClick = onDirectEditPdf,
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                        modifier = Modifier.testTag("grid_direct_edit_${doc.id}")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.EditNote,
-                                contentDescription = "Direct Edit PDF",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "Edit PDF",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
+                        icon = Icons.Default.EditNote,
+                        height = 30.dp,
+                        testTag = "grid_direct_edit_${doc.id}"
+                    )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         IconButton(
@@ -1232,32 +1214,13 @@ private fun DocumentListRowCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Surface(
+                    DynamicRgbChip(
+                        text = "Edit PDF",
                         onClick = onDirectEditPdf,
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.EditNote,
-                                contentDescription = "Direct Edit PDF",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "Edit PDF",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
+                        icon = Icons.Default.EditNote,
+                        badgeText = "RGB",
+                        height = 30.dp
+                    )
 
                     Surface(
                         onClick = onSharePdf,

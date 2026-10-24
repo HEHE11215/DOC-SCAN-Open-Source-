@@ -77,6 +77,8 @@ import com.example.utils.ShareExportHelper
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.graphics.Color
+import com.example.ui.theme.DynamicRgbActionButton
+import com.example.ui.theme.DynamicRgbGlowCard
 import com.example.ui.theme.GlassActionButton
 
 private enum class ActivePdfToolDialog {
@@ -203,7 +205,7 @@ fun PdfToolsAndConvertScreen(
                 ) {
                     // FLAGSHIP PROMINENT FEATURE CARD: FREE Direct PDF Editor
                     item {
-                        FrostedGlassCard(
+                        DynamicRgbGlowCard(
                             cornerRadius = 22.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -266,10 +268,10 @@ fun PdfToolsAndConvertScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    GlassActionButton(
-                                        text = "Open PDF Studio",
+                                    DynamicRgbActionButton(
+                                        text = "Edit PDF Studio",
                                         icon = Icons.Default.EditNote,
-                                        isPrimary = true,
+                                        badgeText = "LIVE",
                                         height = 44.dp,
                                         onClick = {
                                             if (allDocs.size == 1) {
@@ -279,16 +281,16 @@ fun PdfToolsAndConvertScreen(
                                             }
                                         },
                                         modifier = Modifier
-                                            .weight(1.15f)
+                                            .weight(1.18f)
                                             .testTag("tool_direct_pdf_editor_button")
                                     )
                                     GlassActionButton(
-                                        text = "Import PDF File",
+                                        text = "Import PDF",
                                         icon = Icons.Default.FileUpload,
                                         isPrimary = false,
                                         height = 44.dp,
                                         onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(0.95f)
                                     )
                                 }
                             }

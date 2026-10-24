@@ -60,11 +60,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -717,10 +719,10 @@ fun Glowing3dRgbCameraOrb(
 }
 
 /**
- * Dynamic 3D Glowing RGB Action Button:
- * Prominent interactive button with an animated rotating RGB chromatic border,
- * liquid glass backdrop, glowing neon reflection, and high-contrast typography.
- * Tailored specifically for prominent features like the Direct PDF Editor.
+ * Dynamic 3D Glowing & Blinking RGB Action Button:
+ * Prominent attention-grabbing flagship button with a stationary rounded-rectangle frame,
+ * continuous 360° rotating RGB SweepGradient shader, multi-layered blinking neon aura bloom,
+ * pulsing RGB icon orb, and blinking live status badge.
  */
 @Composable
 fun DynamicRgbActionButton(
@@ -728,95 +730,175 @@ fun DynamicRgbActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = Icons.Default.EditNote,
-    badgeText: String? = "FREE",
+    badgeText: String? = "LIVE",
     height: Dp = 44.dp,
     testTag: String = "dynamic_rgb_action_button"
 ) {
     val haptics = LocalHaptics.current
     val isDark = LocalIsDarkGlass.current
     val infiniteTransition = rememberInfiniteTransition(label = "DynamicRgbButton")
+
+    // Continuous 360° RGB color rotation around the stationary rounded rectangle perimeter
     val sweepAngle by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3200, easing = LinearEasing),
+            animation = tween(durationMillis = 1800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "RgbButtonSweep"
     )
-    val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0.85f,
+
+    // Fast attention-seeking neon RGB blink / heartbeat strobe
+    val blinkPulse by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 560, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "RgbButtonGlowPulse"
+        label = "RgbButtonBlinkPulse"
     )
 
-    val shape = RoundedCornerShape(14.dp)
-    val rgbColors = remember {
-        listOf(
-            RgbCyan,
-            RgbBlue,
-            RgbViolet,
-            RgbMagenta,
-            RgbOrange,
-            RgbEmerald,
-            RgbCyan
+    // Subtle breathing scale so the flagship button feels alive
+    val scalePulse by infiniteTransition.animateFloat(
+        initialValue = 0.99f,
+        targetValue = 1.022f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "RgbButtonScalePulse"
+    )
+
+    val cornerRadiusDp = if (height <= 34.dp) 10.dp else 14.dp
+    val shape = RoundedCornerShape(cornerRadiusDp)
+
+    val rgbColorInts = remember {
+        intArrayOf(
+            android.graphics.Color.rgb(0, 242, 254),   // Electric Cyan
+            android.graphics.Color.rgb(59, 130, 246),  // Royal Blue
+            android.graphics.Color.rgb(168, 85, 247),  // Neon Violet
+            android.graphics.Color.rgb(255, 8, 68),    // Hot Magenta
+            android.graphics.Color.rgb(255, 138, 0),   // Solar Orange
+            android.graphics.Color.rgb(0, 230, 118),   // Emerald Neon
+            android.graphics.Color.rgb(0, 242, 254)    // Loop back to Cyan
         )
     }
 
-    Surface(
-        onClick = {
-            haptics.heavy()
-            onClick()
-        },
-        shape = shape,
-        color = if (isDark) Color(0xFF0F172A).copy(alpha = 0.88f) else Color.White.copy(alpha = 0.94f),
-        tonalElevation = 6.dp,
+    val isCompact = height <= 36.dp
+
+    Box(
         modifier = modifier
             .height(height)
-            .testTag(testTag)
-            .drawBehind {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val sweepBrush = Brush.sweepGradient(colors = rgbColors, center = center)
-
-                // Outer rotating chromatic neon bloom
-                rotate(sweepAngle, center) {
-                    drawRoundRect(
-                        brush = sweepBrush,
-                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                        size = Size(size.width + 6.dp.toPx(), size.height + 6.dp.toPx()),
-                        cornerRadius = CornerRadius(17.dp.toPx(), 17.dp.toPx()),
-                        style = Stroke(width = 3.5.dp.toPx()),
-                        alpha = glowPulse * 0.45f
-                    )
-                }
-
-                // Crisp rotating RGB perimeter stroke
-                rotate(sweepAngle, center) {
-                    drawRoundRect(
-                        brush = sweepBrush,
-                        cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx()),
-                        style = Stroke(width = 2.dp.toPx())
-                    )
-                }
+            .graphicsLayer {
+                scaleX = scalePulse
+                scaleY = scalePulse
             }
+            .testTag(testTag)
+            .drawWithContent {
+                val w = size.width.coerceAtLeast(1f)
+                val h = size.height.coerceAtLeast(1f)
+                val cx = w / 2f
+                val cy = h / 2f
+                val crPx = cornerRadiusDp.toPx()
+
+                // Stationary rounded-rectangle shader: rotate ONLY the SweepGradient matrix, NEVER the rectangle!
+                val sweepShader = android.graphics.SweepGradient(cx, cy, rgbColorInts, null)
+                val shaderMatrix = android.graphics.Matrix().apply {
+                    setRotate(sweepAngle, cx, cy)
+                }
+                sweepShader.setLocalMatrix(shaderMatrix)
+                val rotatingRgbBrush = ShaderBrush(sweepShader)
+
+                // 1. Outer Unclipped Blinking RGB Neon Halo Bloom (radiates outside button edges)
+                val outerPad1 = 3.5.dp.toPx()
+                drawRoundRect(
+                    brush = rotatingRgbBrush,
+                    topLeft = Offset(-outerPad1, -outerPad1),
+                    size = Size(w + outerPad1 * 2f, h + outerPad1 * 2f),
+                    cornerRadius = CornerRadius(crPx + outerPad1, crPx + outerPad1),
+                    style = Stroke(width = 5.5.dp.toPx()),
+                    alpha = 0.22f + (0.48f * blinkPulse)
+                )
+
+                val outerPad2 = 1.2.dp.toPx()
+                drawRoundRect(
+                    brush = rotatingRgbBrush,
+                    topLeft = Offset(-outerPad2, -outerPad2),
+                    size = Size(w + outerPad2 * 2f, h + outerPad2 * 2f),
+                    cornerRadius = CornerRadius(crPx + outerPad2, crPx + outerPad2),
+                    style = Stroke(width = 3.2.dp.toPx()),
+                    alpha = 0.50f + (0.45f * blinkPulse)
+                )
+
+                // 2. Deep High-Contrast Cyber-Glass Interior Fill so RGB Neon & White Text Pop
+                val bgFillColor = if (isDark) Color(0xFF091124) else Color(0xFF0F172A)
+                drawRoundRect(
+                    color = bgFillColor.copy(alpha = 0.94f),
+                    topLeft = Offset.Zero,
+                    size = Size(w, h),
+                    cornerRadius = CornerRadius(crPx, crPx)
+                )
+
+                // 3. Inner Blinking RGB Aurora Sheen across the button face
+                drawRoundRect(
+                    brush = rotatingRgbBrush,
+                    topLeft = Offset.Zero,
+                    size = Size(w, h),
+                    cornerRadius = CornerRadius(crPx, crPx),
+                    alpha = 0.14f + (0.20f * blinkPulse)
+                )
+
+                // 4. Draw Button Content (Icon, Text, Blinking Badge)
+                drawContent()
+
+                // 5. Crisp Stationary Rounded-Rect Rotating RGB Border Outline ON TOP of Background
+                val strokeInset = 1.dp.toPx()
+                drawRoundRect(
+                    brush = rotatingRgbBrush,
+                    topLeft = Offset(strokeInset, strokeInset),
+                    size = Size(w - strokeInset * 2f, h - strokeInset * 2f),
+                    cornerRadius = CornerRadius((crPx - strokeInset).coerceAtLeast(2f), (crPx - strokeInset).coerceAtLeast(2f)),
+                    style = Stroke(width = if (isCompact) 2.2.dp.toPx() else 2.7.dp.toPx())
+                )
+
+                // 6. Blinking White-Hot Specular Strobe Rim inside the RGB border
+                val innerInset = 2.2.dp.toPx()
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.18f + (0.58f * blinkPulse)),
+                    topLeft = Offset(innerInset, innerInset),
+                    size = Size((w - innerInset * 2f).coerceAtLeast(1f), (h - innerInset * 2f).coerceAtLeast(1f)),
+                    cornerRadius = CornerRadius((crPx - innerInset).coerceAtLeast(1f), (crPx - innerInset).coerceAtLeast(1f)),
+                    style = Stroke(width = 1.dp.toPx())
+                )
+            }
+            .clip(shape)
+            .clickable {
+                haptics.heavy()
+                onClick()
+            },
+        contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(
+                horizontal = if (isCompact) 9.dp else 12.dp,
+                vertical = if (isCompact) 4.dp else 6.dp
+            ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (isCompact) 5.dp else 7.dp)
         ) {
             if (icon != null) {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(if (isCompact) 20.dp else 24.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(RgbCyan, RgbMagenta)
+                                colors = listOf(
+                                    lerp(RgbCyan, RgbMagenta, blinkPulse),
+                                    lerp(RgbMagenta, RgbEmerald, blinkPulse)
+                                )
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -825,31 +907,50 @@ fun DynamicRgbActionButton(
                         imageVector = icon,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(if (isCompact) 13.dp else 15.dp)
                     )
                 }
             }
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelLarge,
+                style = if (isCompact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
                 maxLines = 1,
                 softWrap = false
             )
             if (badgeText != null) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = RgbEmerald.copy(alpha = 0.20f),
-                    border = BorderStroke(1.dp, RgbEmerald.copy(alpha = 0.50f))
-                ) {
-                    Text(
-                        text = badgeText,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isDark) RgbEmerald else Color(0xFF047857),
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                    color = lerp(RgbMagenta, RgbCyan, blinkPulse).copy(alpha = 0.28f + 0.30f * blinkPulse),
+                    border = BorderStroke(
+                        1.dp,
+                        lerp(RgbCyan, Color.White, blinkPulse).copy(alpha = 0.65f + 0.35f * blinkPulse)
                     )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    lerp(RgbEmerald, Color.White, blinkPulse)
+                                        .copy(alpha = 0.45f + 0.55f * blinkPulse)
+                                )
+                        )
+                        Text(
+                            text = badgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
             }
         }
@@ -857,7 +958,7 @@ fun DynamicRgbActionButton(
 }
 
 /**
- * Compact Dynamic RGB Chip for prominent toolbars & hero action strips.
+ * Compact Dynamic Blinking & Rotating RGB Chip for toolbars, document cards & header strips.
  */
 @Composable
 fun DynamicRgbChip(
@@ -866,6 +967,7 @@ fun DynamicRgbChip(
     modifier: Modifier = Modifier,
     icon: ImageVector? = Icons.Default.EditNote,
     badgeText: String? = null,
+    height: Dp = 34.dp,
     testTag: String = "dynamic_rgb_chip"
 ) {
     DynamicRgbActionButton(
@@ -874,9 +976,120 @@ fun DynamicRgbChip(
         modifier = modifier,
         icon = icon,
         badgeText = badgeText,
-        height = 36.dp,
+        height = height,
         testTag = testTag
     )
+}
+
+/**
+ * Flagship Hero Card with a stationary rounded-rectangle rotating & blinking RGB neon perimeter outline.
+ */
+@Composable
+fun DynamicRgbGlowCard(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 22.dp,
+    content: @Composable () -> Unit
+) {
+    val isDark = LocalIsDarkGlass.current
+    val infiniteTransition = rememberInfiniteTransition(label = "DynamicRgbGlowCard")
+    val sweepAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "RgbCardSweep"
+    )
+    val blinkPulse by infiniteTransition.animateFloat(
+        initialValue = 0.30f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 720, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "RgbCardBlink"
+    )
+
+    val rgbColorInts = remember {
+        intArrayOf(
+            android.graphics.Color.rgb(0, 242, 254),
+            android.graphics.Color.rgb(59, 130, 246),
+            android.graphics.Color.rgb(168, 85, 247),
+            android.graphics.Color.rgb(255, 8, 68),
+            android.graphics.Color.rgb(255, 138, 0),
+            android.graphics.Color.rgb(0, 230, 118),
+            android.graphics.Color.rgb(0, 242, 254)
+        )
+    }
+
+    val shape = RoundedCornerShape(cornerRadius)
+    val contentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+
+    CompositionLocalProvider(LocalContentColor provides contentColor) {
+        Box(
+            modifier = modifier
+                .drawWithContent {
+                    val w = size.width.coerceAtLeast(1f)
+                    val h = size.height.coerceAtLeast(1f)
+                    val cx = w / 2f
+                    val cy = h / 2f
+                    val crPx = cornerRadius.toPx()
+
+                    val sweepShader = android.graphics.SweepGradient(cx, cy, rgbColorInts, null)
+                    val shaderMatrix = android.graphics.Matrix().apply {
+                        setRotate(sweepAngle, cx, cy)
+                    }
+                    sweepShader.setLocalMatrix(shaderMatrix)
+                    val rotatingRgbBrush = ShaderBrush(sweepShader)
+
+                    // Outer pulsing RGB neon bloom around the card
+                    val outerPad = 2.5.dp.toPx()
+                    drawRoundRect(
+                        brush = rotatingRgbBrush,
+                        topLeft = Offset(-outerPad, -outerPad),
+                        size = Size(w + outerPad * 2f, h + outerPad * 2f),
+                        cornerRadius = CornerRadius(crPx + outerPad, crPx + outerPad),
+                        style = Stroke(width = 4.5.dp.toPx()),
+                        alpha = 0.24f + (0.42f * blinkPulse)
+                    )
+
+                    // Frosted glass card surface fill
+                    val fillColor = if (isDark) Color(0xFF101B33).copy(alpha = 0.92f) else Color.White.copy(alpha = 0.92f)
+                    drawRoundRect(
+                        color = fillColor,
+                        topLeft = Offset.Zero,
+                        size = Size(w, h),
+                        cornerRadius = CornerRadius(crPx, crPx)
+                    )
+
+                    // Subtle rotating RGB ambient tint inside card
+                    drawRoundRect(
+                        brush = rotatingRgbBrush,
+                        topLeft = Offset.Zero,
+                        size = Size(w, h),
+                        cornerRadius = CornerRadius(crPx, crPx),
+                        alpha = if (isDark) 0.10f * blinkPulse else 0.07f * blinkPulse
+                    )
+
+                    drawContent()
+
+                    // Crisp stationary rotating RGB perimeter outline
+                    val inset = 1.dp.toPx()
+                    drawRoundRect(
+                        brush = rotatingRgbBrush,
+                        topLeft = Offset(inset, inset),
+                        size = Size(w - inset * 2f, h - inset * 2f),
+                        cornerRadius = CornerRadius((crPx - inset).coerceAtLeast(2f), (crPx - inset).coerceAtLeast(2f)),
+                        style = Stroke(width = 2.2.dp.toPx()),
+                        alpha = 0.75f + (0.25f * blinkPulse)
+                    )
+                }
+                .clip(shape)
+        ) {
+            content()
+        }
+    }
 }
 
 /**
