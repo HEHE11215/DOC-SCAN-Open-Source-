@@ -21,9 +21,14 @@ class AppContainer(context: Context) {
         ).fallbackToDestructiveMigration(true).build()
     }
 
-    val firestore: FirebaseFirestore by lazy {
-        val dbId = appContext.getString(R.string.firestore_database_id)
-        FirebaseFirestore.getInstance(dbId)
+    val firestore: FirebaseFirestore? by lazy {
+        try {
+            val dbId = appContext.getString(R.string.firestore_database_id)
+            FirebaseFirestore.getInstance(dbId)
+        } catch (e: Throwable) {
+            android.util.Log.w("AppContainer", "Firestore not available: ${e.message}")
+            null
+        }
     }
 
     val cloudSyncRepository: CloudSyncRepository by lazy {

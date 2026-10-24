@@ -85,8 +85,16 @@ fun SettingsScreen(
     val credentialManager = remember(context) { CredentialManager.create(context) }
 
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val currentUser by remember { FirebaseAuth.getInstance().authStateFlow() }
-        .collectAsStateWithLifecycle(initialValue = FirebaseAuth.getInstance().currentUser)
+    val authInstance = remember {
+        try {
+            FirebaseAuth.getInstance()
+        } catch (e: Throwable) {
+            null
+        }
+    }
+    val currentUser by remember(authInstance) {
+        authInstance?.authStateFlow() ?: kotlinx.coroutines.flow.flowOf(null)
+    }.collectAsStateWithLifecycle(initialValue = authInstance?.currentUser)
     var showPinDialog by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
 

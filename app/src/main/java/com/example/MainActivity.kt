@@ -80,12 +80,14 @@ import com.example.ui.theme.LocalIsDarkGlass
 import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.ui.viewmodel.ScannerCaptureMode
 import com.example.utils.LocalHaptics
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
@@ -118,19 +120,41 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                FirebaseApp.initializeApp(this)
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "FirebaseApp init fallback: ${e.message}")
+        }
+
         appContainer = AppContainer(applicationContext)
 
         if (savedInstanceState == null && intent != null) {
-            val act = intent.action
-            if (act == Intent.ACTION_SEND || act == Intent.ACTION_SEND_MULTIPLE || act == Intent.ACTION_VIEW) {
-                pendingIncomingIntent.value = intent
+            try {
+                val act = intent.action
+                if (act == Intent.ACTION_SEND || act == Intent.ACTION_SEND_MULTIPLE || act == Intent.ACTION_VIEW) {
+                    pendingIncomingIntent.value = intent
+                }
+            } catch (e: Throwable) {
+                android.util.Log.w("MainActivity", "Error parsing initial intent: ${e.message}")
             }
         }
 
         setContent {
             val scope = rememberCoroutineScope()
-            val currentUser by remember { FirebaseAuth.getInstance().authStateFlow() }
-                .collectAsStateWithLifecycle(initialValue = FirebaseAuth.getInstance().currentUser)
+            val authInstance = remember {
+                try {
+                    FirebaseAuth.getInstance()
+                } catch (e: Throwable) {
+                    android.util.Log.w("MainActivity", "FirebaseAuth not available: ${e.message}")
+                    null
+                }
+            }
+            val currentUser by remember(authInstance) {
+                authInstance?.authStateFlow() ?: flowOf(null)
+            }.collectAsStateWithLifecycle(initialValue = authInstance?.currentUser)
             val rootSettings by appContainer.settingsRepository.settingsFlow
                 .collectAsStateWithLifecycle(initialValue = UserSettings())
             val incomingIntent by pendingIncomingIntent.collectAsStateWithLifecycle()
@@ -247,61 +271,66 @@ fun DocuScanMainShell(
         val mime = intent.type ?: ""
         onConsumeIncomingIntent()
 
-        when (action) {
-            Intent.ACTION_SEND -> {
-                val uri = extractSingleUriFromIntent(intent) ?: return@LaunchedEffect
-                if (mime.contains("pdf", ignoreCase = true) || uri.toString().endsWith(".pdf", ignoreCase = true)) {
-                    viewModel.importExternalPdf(
-                        uri = uri,
-                        title = "Shared_PDF_${System.currentTimeMillis() / 1000}",
-                        onImported = { docId ->
-                            navController.navigate(DirectPdfEditorRoute(docId, 0))
-                        }
-                    )
-                } else {
-                    viewModel.importImagesForDirectPdfEditor(
-                        uris = listOf(uri),
-                        defaultTitle = "Shared_Doc_${System.currentTimeMillis() / 1000}",
-                        onCreated = { docId ->
-                            navController.navigate(DirectPdfEditorRoute(docId, 0))
-                        }
-                    )
+        try {
+            when (action) {
+                Intent.ACTION_SEND -> {
+                    val uri = extractSingleUriFromIntent(intent) ?: return@LaunchedEffect
+                    if (mime.contains("pdf", ignoreCase = true) || uri.toString().endsWith(".pdf", ignoreCase = true)) {
+                        viewModel.importExternalPdf(
+                            uri = uri,
+                            title = "Shared_PDF_${System.currentTimeMillis() / 1000}",
+                            onImported = { docId ->
+                                navController.navigate(DirectPdfEditorRoute(docId, 0))
+                            }
+                        )
+                    } else {
+                        viewModel.importImagesForDirectPdfEditor(
+                            uris = listOf(uri),
+                            defaultTitle = "Shared_Doc_${System.currentTimeMillis() / 1000}",
+                            onCreated = { docId ->
+                                navController.navigate(DirectPdfEditorRoute(docId, 0))
+                            }
+                        )
+                    }
                 }
-            }
 
-            Intent.ACTION_SEND_MULTIPLE -> {
-                val uris = extractMultipleUrisFromIntent(intent)
-                if (uris.isNotEmpty()) {
-                    viewModel.importImagesForDirectPdfEditor(
-                        uris = uris,
-                        defaultTitle = "Shared_Pages_${System.currentTimeMillis() / 1000}",
-                        onCreated = { docId ->
-                            navController.navigate(DirectPdfEditorRoute(docId, 0))
-                        }
-                    )
+                Intent.ACTION_SEND_MULTIPLE -> {
+                    val uris = extractMultipleUrisFromIntent(intent)
+                    if (uris.isNotEmpty()) {
+                        viewModel.importImagesForDirectPdfEditor(
+                            uris = uris,
+                            defaultTitle = "Shared_Pages_${System.currentTimeMillis() / 1000}",
+                            onCreated = { docId ->
+                                navController.navigate(DirectPdfEditorRoute(docId, 0))
+                            }
+                        )
+                    }
                 }
-            }
 
-            Intent.ACTION_VIEW -> {
-                val uri = intent.data ?: extractSingleUriFromIntent(intent) ?: return@LaunchedEffect
-                if (mime.contains("pdf", ignoreCase = true) || uri.toString().endsWith(".pdf", ignoreCase = true)) {
-                    viewModel.importExternalPdf(
-                        uri = uri,
-                        title = "Opened_PDF_${System.currentTimeMillis() / 1000}",
-                        onImported = { docId ->
-                            navController.navigate(DirectPdfEditorRoute(docId, 0))
-                        }
-                    )
-                } else {
-                    viewModel.importImagesForDirectPdfEditor(
-                        uris = listOf(uri),
-                        defaultTitle = "Opened_Image_${System.currentTimeMillis() / 1000}",
-                        onCreated = { docId ->
-                            navController.navigate(DirectPdfEditorRoute(docId, 0))
-                        }
-                    )
+                Intent.ACTION_VIEW -> {
+                    val uri = intent.data ?: extractSingleUriFromIntent(intent) ?: return@LaunchedEffect
+                    if (mime.contains("pdf", ignoreCase = true) || uri.toString().endsWith(".pdf", ignoreCase = true)) {
+                        viewModel.importExternalPdf(
+                            uri = uri,
+                            title = "Opened_PDF_${System.currentTimeMillis() / 1000}",
+                            onImported = { docId ->
+                                navController.navigate(DirectPdfEditorRoute(docId, 0))
+                            }
+                        )
+                    } else {
+                        viewModel.importImagesForDirectPdfEditor(
+                            uris = listOf(uri),
+                            defaultTitle = "Opened_Image_${System.currentTimeMillis() / 1000}",
+                            onCreated = { docId ->
+                                navController.navigate(DirectPdfEditorRoute(docId, 0))
+                            }
+                        )
+                    }
                 }
             }
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "Failed to process shared document", e)
+            viewModel.showStatus("Unable to open shared file.")
         }
     }
 

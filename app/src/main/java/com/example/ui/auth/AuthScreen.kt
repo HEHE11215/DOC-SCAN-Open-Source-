@@ -94,7 +94,11 @@ fun attemptAutoSignIn(
     onUnauthenticated: () -> Unit,
     scope: CoroutineScope
 ) {
-    val currentUser = FirebaseAuth.getInstance().currentUser
+    val currentUser = try {
+        FirebaseAuth.getInstance().currentUser
+    } catch (e: Throwable) {
+        null
+    }
     if (currentUser != null) {
         onAuthSuccess()
         return
@@ -187,7 +191,11 @@ fun signOutUser(
     onSignOutComplete: () -> Unit,
     scope: CoroutineScope
 ) {
-    FirebaseAuth.getInstance().signOut()
+    try {
+        FirebaseAuth.getInstance().signOut()
+    } catch (e: Throwable) {
+        Log.w("Auth", "Failed to sign out Firebase", e)
+    }
     scope.launch {
         try {
             credentialManager.clearCredentialState(ClearCredentialStateRequest())

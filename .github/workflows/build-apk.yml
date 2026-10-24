@@ -59,6 +59,7 @@ jobs:
           # 2. Release Keystore (auto-generated if not provided so assembleRelease works out-of-the-box)
           RELEASE_KEYSTORE="${RUNNER_TEMP}/doc-scan-release.jks"
           keytool -genkey -v -keystore "$RELEASE_KEYSTORE" -storepass docscanrelease -alias upload -keypass docscanrelease -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Doc Scan,O=Doc Scan Release,C=US"
+          cp "$RELEASE_KEYSTORE" my-upload-key.jks || true
           echo "KEYSTORE_PATH=$RELEASE_KEYSTORE" >> $GITHUB_ENV
           echo "STORE_PASSWORD=docscanrelease" >> $GITHUB_ENV
           echo "KEY_PASSWORD=docscanrelease" >> $GITHUB_ENV
@@ -81,8 +82,22 @@ jobs:
             gradle assembleRelease assembleDebug --no-daemon --stacktrace
           fi
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/release/*.apk release-artifacts/Doc-Scan-v1.0.0-release.apk
-          cp app/build/outputs/apk/debug/*.apk release-artifacts/Doc-Scan-v1.0.0-debug.apk
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk release-artifacts/Doc-Scan-v1.0.0-release.apk
+          else
+            cp app/build/outputs/apk/release/*.apk release-artifacts/Doc-Scan-v1.0.0-release.apk
+          fi
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Doc-Scan-v1.0.0-debug.apk
+          else
+            cp app/build/outputs/apk/debug/*.apk release-artifacts/Doc-Scan-v1.0.0-debug.apk
+          fi
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          if [ -n "$APKSIGNER" ] && [ -x "$APKSIGNER" ]; then
+            echo "Verifying release APK signature:"
+            "$APKSIGNER" verify --verbose release-artifacts/Doc-Scan-v1.0.0-release.apk || true
+          fi
 
       - name: Upload Doc Scan APK Artifacts
         uses: actions/upload-artifact@v4

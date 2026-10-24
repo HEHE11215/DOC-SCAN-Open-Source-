@@ -17,26 +17,38 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class CloudSyncRepository(
-    private val db: FirebaseFirestore
+    private val db: FirebaseFirestore?
 ) {
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
+        try {
+            FirebaseFirestore.getInstance(
+                context.applicationContext.getString(R.string.firestore_database_id)
+            )
+        } catch (e: Throwable) {
+            null
+        }
     )
 
-    private val auth: FirebaseAuth
-        get() = FirebaseAuth.getInstance(db.app)
+    private val auth: FirebaseAuth?
+        get() = try {
+            db?.app?.let { FirebaseAuth.getInstance(it) } ?: FirebaseAuth.getInstance()
+        } catch (e: Throwable) {
+            null
+        }
 
     private fun requireUserId(): String {
-        return auth.currentUser?.uid
+        return auth?.currentUser?.uid
             ?: throw IllegalStateException("User must be signed in with Google before accessing Firestore.")
     }
 
-    fun observeDocuments(userId: String = auth.currentUser?.uid ?: "unauthenticated"): Flow<List<CloudDocument>> = flow {
+    fun observeDocuments(userId: String = auth?.currentUser?.uid ?: "unauthenticated"): Flow<List<CloudDocument>> = flow {
+        val firestore = db ?: run {
+            emit(emptyList<CloudDocument>())
+            return@flow
+        }
         val path = "users/$userId/documents"
         emitAll(
-            db.collection("users").document(userId).collection("documents")
+            firestore.collection("users").document(userId).collection("documents")
                 .whereEqualTo("userId", userId)
                 .snapshots()
                 .map { snapshot ->
@@ -51,10 +63,14 @@ class CloudSyncRepository(
         )
     }
 
-    fun observeFolders(userId: String = auth.currentUser?.uid ?: "unauthenticated"): Flow<List<CloudFolder>> = flow {
+    fun observeFolders(userId: String = auth?.currentUser?.uid ?: "unauthenticated"): Flow<List<CloudFolder>> = flow {
+        val firestore = db ?: run {
+            emit(emptyList<CloudFolder>())
+            return@flow
+        }
         val path = "users/$userId/folders"
         emitAll(
-            db.collection("users").document(userId).collection("folders")
+            firestore.collection("users").document(userId).collection("folders")
                 .whereEqualTo("userId", userId)
                 .snapshots()
                 .map { snapshot ->
@@ -70,10 +86,11 @@ class CloudSyncRepository(
     }
 
     suspend fun getUserDocuments(): Result<List<CloudDocument>> = runCatching {
+        val firestore = db ?: return@runCatching emptyList()
         val uid = requireUserId()
         val path = "users/$uid/documents"
         try {
-            val snapshot = db.collection("users").document(uid).collection("documents")
+            val snapshot = firestore.collection("users").document(uid).collection("documents")
                 .whereEqualTo("userId", uid)
                 .get()
                 .await()
@@ -89,9 +106,10 @@ class CloudSyncRepository(
     }
 
     suspend fun getDocumentById(targetUserId: String, docId: String): Result<CloudDocument?> = runCatching {
+        val firestore = db ?: return@runCatching null
         val path = "users/$targetUserId/documents/$docId"
         try {
-            val doc = db.collection("users").document(targetUserId)
+            val doc = firestore.collection("users").document(targetUserId)
                 .collection("documents").document(docId)
                 .get()
                 .await()
@@ -119,9 +137,10 @@ class CloudSyncRepository(
         pageSize: String = "A4",
         isUpdate: Boolean = false
     ): Result<String> = runCatching {
+        val firestore = db ?: return@runCatching docId
         val uid = requireUserId()
         val cleanDocId = docId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(120).ifBlank { UUID.randomUUID().toString() }
-        val docRef = db.collection("users").document(uid).collection("documents").document(cleanDocId)
+        val docRef = firestore.collection("users").document(uid).collection("documents").document(cleanDocId)
         val safePageSize = if (pageSize in listOf("A4", "LETTER", "ORIGINAL")) pageSize else "A4"
         try {
             if (isUpdate) {
@@ -169,8 +188,9 @@ class CloudSyncRepository(
     }
 
     suspend fun deleteDocument(docId: String): Result<Unit> = runCatching {
+        val firestore = db ?: return@runCatching Unit
         val uid = requireUserId()
-        val docRef = db.collection("users").document(uid).collection("documents").document(docId)
+        val docRef = firestore.collection("users").document(uid).collection("documents").document(docId)
         try {
             docRef.delete().await()
         } catch (e: CancellationException) {
@@ -187,9 +207,10 @@ class CloudSyncRepository(
         colorHex: String = "#2563EB",
         isUpdate: Boolean = false
     ): Result<String> = runCatching {
+        val firestore = db ?: return@runCatching folderId
         val uid = requireUserId()
         val cleanId = folderId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(120).ifBlank { UUID.randomUUID().toString() }
-        val folderRef = db.collection("users").document(uid).collection("folders").document(cleanId)
+        val folderRef = firestore.collection("users").document(uid).collection("folders").document(cleanId)
         try {
             if (isUpdate) {
                 val updatePayload = mapOf(
@@ -218,8 +239,9 @@ class CloudSyncRepository(
     }
 
     suspend fun deleteFolder(folderId: String): Result<Unit> = runCatching {
+        val firestore = db ?: return@runCatching Unit
         val uid = requireUserId()
-        val folderRef = db.collection("users").document(uid).collection("folders").document(folderId)
+        val folderRef = firestore.collection("users").document(uid).collection("folders").document(folderId)
         try {
             folderRef.delete().await()
         } catch (e: CancellationException) {
