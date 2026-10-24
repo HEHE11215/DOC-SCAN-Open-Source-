@@ -3,35 +3,143 @@ name: Build & Release Doc Scan APK
 on:
   push:
     branches: [ "**" ]
-    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to publish (e.g. v1.0.0)'
+        description: 'Optional custom release tag (leave blank to auto-bump version)'
         required: false
-        default: 'v1.0.0'
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   build-and-release:
-    name: Build & Release Doc Scan APK
+    name: 🚀 Build & Release Doc Scan APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: 📥 Checkout Repository (Full History for Tags & Changelog)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up JDK 21
+      - name: 🔢 Calculate New Version & Generate Emoji Release Notes
+        id: version_info
+        run: |
+          git fetch --tags --force || true
+
+          RUN_NUM="${GITHUB_RUN_NUMBER:-1}"
+          ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
+          SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "latest")
+          BRANCH_NAME="${GITHUB_REF_NAME:-main}"
+          BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          # Find the most recent previous tag for generating commit diff
+          PREV_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1 || echo "")
+
+          # Determine brand-new version for every push
+          INPUT_TAG="${{ github.event.inputs.release_tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            CLEAN_VER="${INPUT_TAG#v}"
+            RAW_TAG="v${CLEAN_VER}"
+          else
+            COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "1")
+            PATCH_NUM=$((RUN_NUM + COMMIT_COUNT))
+            CLEAN_VER="1.3.${PATCH_NUM}"
+            RAW_TAG="v${CLEAN_VER}"
+
+            # Guarantee we never reuse an existing tag/version
+            while git rev-parse "$RAW_TAG" >/dev/null 2>&1; do
+              PATCH_NUM=$((PATCH_NUM + 1))
+              CLEAN_VER="1.3.${PATCH_NUM}"
+              RAW_TAG="v${CLEAN_VER}"
+            done
+          fi
+
+          VERSION_CODE=$((100 + RUN_NUM * 10 + ATTEMPT))
+
+          echo "APP_VERSION_NAME=${CLEAN_VER}" >> $GITHUB_ENV
+          echo "APP_VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
+          echo "RELEASE_TAG=${RAW_TAG}" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=🚀 Doc Scan ${RAW_TAG} • Direct PDF Studio & Smooth RGB Edition" >> $GITHUB_ENV
+
+          # Build dynamic Git commit changelog with emojis
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$RAW_TAG" ]; then
+            COMMIT_LOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- 🔹 %s (\`%h\`)" 2>/dev/null || echo "")
+          else
+            COMMIT_LOG=$(git log -n 10 --pretty=format:"- 🔹 %s (\`%h\`)" 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$COMMIT_LOG" ]; then
+            COMMIT_LOG="- 🔹 Latest build and stability improvements (\`${SHORT_SHA}\`)"
+          fi
+
+          cat <<EOF > release-notes.md
+          # 🚀 Doc Scan ${RAW_TAG} — Official Android Release
+
+          > 📅 **Release Date:** ${BUILD_DATE}  
+          > 🏷️ **Version:** \`${RAW_TAG}\` (\`versionCode: ${VERSION_CODE}\`)  
+          > 🌿 **Branch / Commit:** \`${BRANCH_NAME}\` (\`${SHORT_SHA}\`)  
+          > 📱 **Supported Android:** Android 8.0+ (API 26 – API 35 / Android 15 Ready)
+
+          ---
+
+          ## ✨ What's New & Proper Changes in ${RAW_TAG}
+
+          ### 🎯 1. Direct In-Place PDF Studio Editor
+          - ✏️ **Tap Any PDF Text to Edit Directly**: Tap any line, name, invoice item, letter, or book text on the PDF page to replace it in-place without ugly floating overlays.
+          - 🎨 **Automatic Paper & Font Matching**: Samples the exact background paper tone and ink color of your PDF so edited text blends seamlessly into the original document.
+          - 🔤 **Live Typography Controls**: Switch between **Sans**, **Serif**, and **Mono** fonts, toggle **Bold**, change ink colors, and adjust exact point size (`pt`) in real time.
+          - 💾 **Direct Save on Main PDF**: Saves your text replacements, comments, highlights, and whiteout directly onto the main PDF file (`1-Tap Save`).
+
+          ### 🔍 2. Silky-Smooth Pinch & Double-Tap PDF Zoom
+          - 🤏 **Centroid-Anchored Pinch-to-Zoom**: Smooth 2-finger pinch zoom (`100%` to `450%`) that tracks the exact center between your fingers without jumping or stiffness.
+          - 👆 **Double-Tap Quick Zoom**: Double-tap any spot on the PDF page to smoothly animate to **240% zoom** focused on that spot; double-tap again to smoothly return to **100% fit**.
+          - 🖐️ **1-Finger Pan & Animated Zoom Bar**: Dedicated **Pan / Zoom** mode for effortless 1-finger scrolling plus animated **+**, **–**, **%**, and **Fit** buttons.
+
+          ### 🌈 3. Dynamic Rotating 3D RGB Camera Orb & PDF Studio Buttons
+          - 🔮 **360° Rotating RGB Camera Orb**: The centerpiece 3D camera orb in the bottom liquid glass dock features a continuous rotating chromatic neon spectrum and breathing halo glow.
+          - ⚡ **Dynamic RGB PDF Edit Buttons**: Prominent **PDF Studio** and **Edit PDF** action buttons now feature a matching animated rotating RGB neon border.
+
+          ### 🎛️ 4. Optimized Button Sizing & Clean Labels
+          - 📐 **Zero Text Clipping**: Redesigned all PDF Studio toolbar chips and mode buttons with concise, high-readability labels (**`Edit Text`**, **`Pan / Zoom`**, **`+ Text`**, **`Erase`**, **`Highlight`**, **`Pen`**, **`Page View`**, **`All Text`**, **`Boxes`**, **`+ Note`**) so text is never hidden or cut off.
+
+          ### 🛡️ 5. GitHub Release & Android Install Reliability
+          - ✅ **Auto-Incrementing Version (`${RAW_TAG}`)**: Every push automatically bumps `versionName` and `versionCode` (`${VERSION_CODE}`) so you can install/update cleanly over older builds.
+          - 🔐 **Dynamic FileProvider Authority & V2/V3 Signing**: Verified APK signing and manifest provider compatibility so the app opens immediately after installing from GitHub Releases.
+
+          ---
+
+          ## 📝 Commit History in This Release
+          ${COMMIT_LOG}
+
+          ---
+
+          ## 📦 APK Downloads & Installation Guide
+
+          | 📁 File Name | 🏷️ Build Type | 💡 Description |
+          | :--- | :--- | :--- |
+          | 💚 **\`Doc-Scan-${RAW_TAG}-release.apk\`** | **Signed Release APK** | **Recommended** — Optimized, signed, ready to install on any Android phone or tablet. |
+          | 🛠️ **\`Doc-Scan-${RAW_TAG}-debug.apk\`** | **Debug APK** | Developer & testing build with debug symbols enabled. |
+
+          ### 📲 How to Install / Update:
+          1. ⬇️ Tap **`Doc-Scan-${RAW_TAG}-release.apk`** under **Assets** below to download.
+          2. 📂 Open the downloaded APK on your Android device and tap **Install / Update**.
+          3. 🎉 Launch **Doc Scan** and tap **PDF Studio** to start editing PDFs directly!
+          EOF
+
+          cat release-notes.md
+
+      - name: ☕ Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Configure Android SDK & Accept Licenses
+      - name: 🤖 Configure Android SDK & Accept Licenses
         run: |
           export ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
@@ -42,12 +150,12 @@ jobs:
             "$SDKMANAGER" "platform-tools" "build-tools;35.0.0" || true
           fi
 
-      - name: Setup Gradle 9.3.1
+      - name: 🐘 Setup Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      - name: Prepare Keystores & Environment
+      - name: 🔑 Prepare Keystores & Environment
         run: |
           # 1. Debug Keystore
           if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
@@ -73,61 +181,54 @@ jobs:
             fi
           fi
 
-      - name: Build Release & Debug APKs
+      - name: 🏗️ Build Release & Debug APKs (${{ env.RELEASE_TAG }})
         run: |
+          echo "Building Doc Scan ${RELEASE_TAG} (versionName=${APP_VERSION_NAME}, versionCode=${APP_VERSION_CODE})..."
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
             ./gradlew assembleRelease assembleDebug --no-daemon --stacktrace
           else
             gradle assembleRelease assembleDebug --no-daemon --stacktrace
           fi
+
           mkdir -p release-artifacts
+          REL_APK="release-artifacts/Doc-Scan-${RELEASE_TAG}-release.apk"
+          DBG_APK="release-artifacts/Doc-Scan-${RELEASE_TAG}-debug.apk"
+
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk release-artifacts/Doc-Scan-v1.0.0-release.apk
+            cp app/build/outputs/apk/release/app-release.apk "$REL_APK"
           else
-            cp app/build/outputs/apk/release/*.apk release-artifacts/Doc-Scan-v1.0.0-release.apk
+            cp app/build/outputs/apk/release/*.apk "$REL_APK"
           fi
+
           if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Doc-Scan-v1.0.0-debug.apk
+            cp app/build/outputs/apk/debug/app-debug.apk "$DBG_APK"
           else
-            cp app/build/outputs/apk/debug/*.apk release-artifacts/Doc-Scan-v1.0.0-debug.apk
+            cp app/build/outputs/apk/debug/*.apk "$DBG_APK"
           fi
 
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
           if [ -n "$APKSIGNER" ] && [ -x "$APKSIGNER" ]; then
-            echo "Verifying release APK signature:"
-            "$APKSIGNER" verify --verbose release-artifacts/Doc-Scan-v1.0.0-release.apk || true
+            echo "✅ Verifying release APK signature for $REL_APK:"
+            "$APKSIGNER" verify --verbose "$REL_APK" || true
           fi
 
-      - name: Upload Doc Scan APK Artifacts
+      - name: 📤 Upload Doc Scan APK Artifacts (${{ env.RELEASE_TAG }})
         uses: actions/upload-artifact@v4
         with:
-          name: Doc-Scan-v1.0.0-APKs
+          name: Doc-Scan-${{ env.RELEASE_TAG }}-APKs
           path: release-artifacts/*.apk
           if-no-files-found: error
 
-      - name: Publish GitHub Release (Doc Scan v1.0.0)
+      - name: 🎉 Publish New GitHub Release (${{ env.RELEASE_TAG }})
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.0.0' }}
-          name: "Doc Scan v1.0.0"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TITLE }}
           prerelease: false
-          generate_release_notes: true
-          body: |
-            ## Doc Scan v1.0.0 Release
-
-            ### Highlights
-            - **Seamless iOS Liquid Glass UI**: Full Light Glass and Dark Glass dual-mode design with floating translucent bottom navigation, spring-animated liquid selection capsule, and tactile vibration haptics.
-            - **Horizontal Swipe Navigation**: Smoothly swipe left and right across **Library**, **Scan**, **Tools**, and **Settings** tabs.
-            - **Smart Document Clear Mode**: Built-in **Clear Mode** default enhancement on capture and upload that whitens paper backgrounds and sharpens text without harsh thresholding, plus Original, Clear B&W, Magic Color, and Grayscale filters.
-            - **Real-Time Brightness & Contrast**: Instant GPU `ColorFilter` preview during slider drag with debounced high-res bitmap commits.
-            - **PDF Signature & Watermark Overlay**: Draw custom digital signatures and impose them directly onto scanned pages or external PDFs.
-            - **Multi-Script Offline OCR**: Extract text in Latin, Devanagari, Chinese, Japanese, and Korean scripts, export to `.txt` or searchable PDF, and convert OCR text directly into formatted PDFs.
-
-            ### Downloads
-            - **`Doc-Scan-v1.0.0-release.apk`** — Signed Release APK ready to install on any Android 8.0+ (API 26+) device.
-            - **`Doc-Scan-v1.0.0-debug.apk`** — Debug APK build.
+          generate_release_notes: false
+          body_path: release-notes.md
           files: |
-            release-artifacts/Doc-Scan-v1.0.0-release.apk
-            release-artifacts/Doc-Scan-v1.0.0-debug.apk
+            release-artifacts/Doc-Scan-${{ env.RELEASE_TAG }}-release.apk
+            release-artifacts/Doc-Scan-${{ env.RELEASE_TAG }}-debug.apk

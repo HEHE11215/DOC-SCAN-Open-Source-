@@ -380,14 +380,14 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "v1.0.0 (Build 1 • Release Ready)",
+                                    text = "v${com.example.BuildConfig.VERSION_NAME} (Build ${com.example.BuildConfig.VERSION_CODE} • Release Ready)",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
                             Text(
-                                text = "GitHub Actions CI/CD is configured in .github/workflows/build-apk.yml to automatically build & publish Doc-Scan-v1.0.0-release.apk and Doc-Scan-v1.0.0-debug.apk to GitHub Releases on every push.",
+                                text = "🚀 GitHub Actions CI/CD (.github/workflows/build-apk.yml) automatically bumps version numbers and publishes a brand-new emoji-rich GitHub Release with signed Release & Debug APKs on every push.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
