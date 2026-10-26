@@ -4,24 +4,19 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Corner scanner brackets -->
+    <!-- Minimalist shadcn/ui Geometric Corner Reticles -->
     <path
-        android:fillColor="#00E5FF"
-        android:pathData="M28,36 L28,28 L36,28 L36,31 L31,31 L31,36 Z M72,28 L80,28 L80,36 L77,36 L77,31 L72,31 Z M28,72 L31,72 L31,77 L36,77 L36,80 L28,80 Z M77,72 L80,72 L80,80 L72,80 L72,77 L77,77 Z" />
-    <!-- Document silhouette -->
+        android:fillColor="#FAFAFA"
+        android:pathData="M27,40 L27,27 L40,27 L40,31 L31,31 L31,40 Z M68,27 L81,27 L81,40 L77,40 L77,31 L68,31 Z M27,68 L31,68 L31,77 L40,77 L40,81 L27,81 Z M77,68 L81,68 L81,81 L68,81 L68,77 L77,77 Z" />
+    <!-- Minimalist Geometric Document Frame -->
+    <path
+        android:fillColor="#FAFAFA"
+        android:pathData="M37,35 L61,35 L71,45 L71,73 L37,73 Z M41,39 L41,69 L67,69 L67,47 L59,47 L59,39 Z" />
+    <!-- Precision Monochrome Scan Beam & Minimalist Typography Lines -->
+    <path
+        android:fillColor="#A1A1AA"
+        android:pathData="M45,49 L55,49 L55,52 L45,52 Z M45,61 L63,61 L63,64 L45,64 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M38,33 L60,33 L70,43 L70,75 L38,75 Z" />
-    <!-- Document folded corner -->
-    <path
-        android:fillColor="#90CAF9"
-        android:pathData="M60,33 L60,43 L70,43 Z" />
-    <!-- Document text bars -->
-    <path
-        android:fillColor="#1E3E62"
-        android:pathData="M43,49 L65,49 L65,52 L43,52 Z M43,56 L61,56 L61,59 L43,59 Z M43,63 L56,63 L56,66 L43,66 Z" />
-    <!-- Glowing Laser Scan Line -->
-    <path
-        android:fillColor="#00E5FF"
-        android:pathData="M25,53 L83,53 L83,56 L25,56 Z" />
+        android:pathData="M24,54.5 L84,54.5 L84,57.5 L24,57.5 Z" />
 </vector>

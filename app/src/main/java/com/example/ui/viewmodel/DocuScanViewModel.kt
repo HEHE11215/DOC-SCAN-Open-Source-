@@ -922,6 +922,172 @@ class DocuScanViewModel(
         }
     }
 
+    /**
+     * Batch applies custom watermark text and/or page numbering across one or multiple selected documents.
+     */
+    fun applyBatchWatermarkAndPageNumbers(
+        docIds: List<String>,
+        watermarkText: String,
+        pageNumberFormat: PageNumberFormat?,
+        pageNumberPosition: PageNumberPosition,
+        onComplete: () -> Unit = {}
+    ) {
+        if (docIds.isEmpty()) {
+            showStatus("Select at least one document for batch watermarking")
+            return
+        }
+        viewModelScope.launch {
+            _scanSession.update {
+                it.copy(
+                    isProcessing = true,
+                    processingMessage = "Applying batch watermark & page numbers to ${docIds.size} document(s)..."
+                )
+            }
+            for (id in docIds) {
+                documentRepository.rebuildDocumentPdf(
+                    docId = id,
+                    watermarkText = watermarkText,
+                    pageNumberFormat = pageNumberFormat,
+                    pageNumberPosition = pageNumberPosition
+                )
+            }
+            _scanSession.update { it.copy(isProcessing = false, processingMessage = "") }
+            showStatus("Applied watermark & page numbers to ${docIds.size} document(s)")
+            onComplete()
+        }
+    }
+
+    /**
+     * Composes Front + Back ID Card or Passport images onto a single A4 printable sheet with optional
+     * Clear B&W Print enhancement and corner cut marks, saving it as a new PDF document.
+     */
+    fun createIdCardPassportA4Document(
+        frontUri: Uri?,
+        backUri: Uri?,
+        title: String,
+        applyBwPrint: Boolean = true,
+        showCropMarks: Boolean = true,
+        documentTypeLabel: String = "ID CARD / PASSPORT (2-SIDE A4)",
+        onCreated: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _scanSession.update {
+                it.copy(isProcessing = true, processingMessage = "Composing 2-side A4 ID / Passport sheet...")
+            }
+            val frontBmp = frontUri?.let { ImageProcessor.loadBitmapFromUri(appContext, it) }
+                ?: ImageProcessor.generateSampleInvoiceBitmap()
+            val backBmp = backUri?.let { ImageProcessor.loadBitmapFromUri(appContext, it) }
+                ?: frontBmp
+
+            val compositeA4 = ImageProcessor.createIdCardCompositePage(
+                frontBitmap = frontBmp,
+                backBitmap = backBmp,
+                applyBwPrint = applyBwPrint,
+                showCropMarks = showCropMarks,
+                documentTypeLabel = documentTypeLabel
+            )
+            val ocr = OcrAndBarcodeEngine.recognizeText(compositeA4, settings.value.defaultOcrScript)
+            val draftPage = DraftScannedPage(
+                originalBitmap = compositeA4,
+                croppedBitmap = compositeA4,
+                enhancedBitmap = compositeA4,
+                filter = if (applyBwPrint) ScanFilter.CLEAR else ScanFilter.ORIGINAL,
+                ocrText = ocr.fullText,
+                ocrBlocks = ocr.blocks
+            )
+            val savedDoc = documentRepository.saveDraftDocument(
+                title = title.ifBlank { "ID_Passport_A4_${System.currentTimeMillis() / 1000}" },
+                category = DocumentCategory.ID_CARD.label,
+                pages = listOf(draftPage),
+                pageSize = PdfPageSize.A4,
+                quality = PdfQuality.HIGH,
+                isSearchable = true
+            )
+            _scanSession.update { it.copy(isProcessing = false, processingMessage = "") }
+            showStatus("Created 2-Side A4 PDF \"${savedDoc.title}\"")
+            onCreated(savedDoc.id)
+        }
+    }
+
+    /**
+     * Stamps a generated QR / Barcode bitmap directly onto a PDF document (or creates a new QR sheet PDF if docId is null).
+     */
+    fun stampQrBitmapOnDocument(
+        docId: String?,
+        qrBitmap: Bitmap,
+        qrLabel: String,
+        onComplete: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            if (docId != null) {
+                documentRepository.rebuildDocumentPdf(
+                    docId = docId,
+                    signatureBitmap = qrBitmap,
+                    signaturePageIndex = 0,
+                    signatureNormX = 0.72f,
+                    signatureNormY = 0.78f,
+                    signatureScale = 0.24f
+                )
+                showStatus("Embedded QR code onto document")
+                onComplete(docId)
+            } else {
+                val draft = DraftScannedPage(
+                    originalBitmap = qrBitmap,
+                    croppedBitmap = qrBitmap,
+                    enhancedBitmap = qrBitmap,
+                    filter = ScanFilter.ORIGINAL,
+                    ocrText = qrLabel
+                )
+                val saved = documentRepository.saveDraftDocument(
+                    title = "QR_${qrLabel.take(18).replace(" ", "_").ifBlank { "Code" }}",
+                    category = DocumentCategory.SCAN.label,
+                    pages = listOf(draft),
+                    pageSize = PdfPageSize.A4,
+                    quality = PdfQuality.HIGH,
+                    isSearchable = true
+                )
+                showStatus("Saved QR code as PDF \"${saved.title}\"")
+                onComplete(saved.id)
+            }
+        }
+    }
+
+    /**
+     * Extracts structured receipt & tabular data rows from a document's pages (running OCR automatically if needed)
+     * and formats them as RFC-4180 CSV.
+     */
+    fun extractReceiptAndTableCsv(
+        docId: String,
+        onResult: (List<List<String>>, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val doc = documentRepository.getDocumentById(docId)
+            val pages = documentRepository.getPagesForDocument(docId).sortedBy { it.pageIndex }
+            val allBlocks = mutableListOf<com.example.domain.model.OcrBlockItem>()
+            val fullTextBuilder = StringBuilder()
+
+            for (page in pages) {
+                val decoded = OcrAndBarcodeEngine.decodeBlocksFromJson(page.ocrBlocksJson)
+                if (page.ocrText.isNotBlank() || decoded.isNotEmpty()) {
+                    fullTextBuilder.appendLine(page.ocrText)
+                    allBlocks.addAll(decoded)
+                } else {
+                    val bmp = ImageProcessor.loadBitmapFromPath(page.processedImagePath)
+                    if (bmp != null) {
+                        val ocr = OcrAndBarcodeEngine.recognizeText(bmp, settings.value.defaultOcrScript)
+                        fullTextBuilder.appendLine(ocr.fullText)
+                        allBlocks.addAll(ocr.blocks)
+                    }
+                }
+            }
+
+            val combinedText = fullTextBuilder.toString().ifBlank { doc?.ocrText.orEmpty() }
+            val rows = ImageProcessor.parseReceiptAndTableToCsvRows(combinedText, allBlocks)
+            val csvString = ImageProcessor.formatCsvRowsToString(rows)
+            onResult(rows, csvString)
+        }
+    }
+
     fun applySignatureToDocument(
         docId: String,
         signatureBitmap: Bitmap,

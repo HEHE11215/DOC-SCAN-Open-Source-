@@ -101,6 +101,10 @@ import com.example.ui.theme.GlassScreenBackground
 import com.example.ui.theme.GlassThemeTogglePill
 import com.example.ui.theme.LocalIsDarkGlass
 import com.example.ui.theme.RoyalBlue
+import com.example.ui.theme.ShadcnBrandLogo
+import com.example.ui.theme.Zinc200
+import com.example.ui.theme.Zinc800
+import com.example.ui.theme.Zinc900
 import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.ui.viewmodel.ScannerCaptureMode
 import com.example.utils.LocalHaptics
@@ -257,20 +261,26 @@ fun LibraryScreen(
                     }
                 }
 
-                // Clean iOS Glass Top Header with 1-Tap Dark/Light Mode Switch
+                // Minimalist shadcn/ui Top Header with Geometric Brand Logo & 1-Tap Dark/Light Mode Switch
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Doc Scan",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ShadcnBrandLogo(size = 30.dp)
+                        Text(
+                            text = "Doc Scan",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -295,7 +305,7 @@ fun LibraryScreen(
                             Icon(
                                 imageVector = if (onlyFavorites) Icons.Default.Star else Icons.Outlined.StarBorder,
                                 contentDescription = "Favorites",
-                                tint = if (onlyFavorites) Color(0xFFFF9F0A) else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (onlyFavorites) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         IconButton(
@@ -340,19 +350,19 @@ fun LibraryScreen(
                     }
                 }
 
-                // PROMINENT FLAGSHIP FEATURE BANNER: FREE Direct PDF Editor (Edit Names, Letters, Books & Comments Directly)
+                // Minimalist Monochrome shadcn/ui Feature Card: Direct PDF Editor
                 DynamicRgbGlowCard(
-                    cornerRadius = 22.dp,
+                    cornerRadius = 12.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 5.dp)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
                         .testTag("hero_direct_pdf_editor_banner")
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -361,19 +371,19 @@ fun LibraryScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Surface(
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(34.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.EditNote,
                                         contentDescription = "Direct PDF Editor",
-                                        tint = Color.White,
-                                        modifier = Modifier.padding(6.dp)
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.padding(7.dp)
                                     )
                                 }
                                 Column {
@@ -384,23 +394,23 @@ fun LibraryScreen(
                                         Text(
                                             text = "Direct PDF Editor",
                                             style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.ExtraBold
+                                            fontWeight = FontWeight.SemiBold
                                         )
                                         Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color(0xFF10B981)
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant
                                         ) {
                                             Text(
-                                                text = "FREE • NO PC NEEDED",
+                                                text = "STUDIO",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
                                     }
                                     Text(
-                                        text = "Change Names, Letters, Books & Comments directly on main PDF & Share to Status",
+                                        text = "Edit text, names, signatures & annotations directly on any PDF",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -412,13 +422,13 @@ fun LibraryScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             DynamicRgbActionButton(
                                 text = "Edit PDF Studio",
                                 icon = Icons.Default.EditNote,
-                                badgeText = "LIVE",
-                                height = 42.dp,
+                                badgeText = null,
+                                height = 40.dp,
                                 onClick = {
                                     if (documents.size == 1) {
                                         onOpenDirectPdfEditor(documents.first().id, 0)
@@ -429,14 +439,14 @@ fun LibraryScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .weight(1.18f)
+                                    .weight(1.15f)
                                     .testTag("hero_direct_edit_pdf_button")
                             )
                             GlassActionButton(
                                 text = "Import PDF",
                                 icon = Icons.Default.FileUpload,
                                 isPrimary = false,
-                                height = 42.dp,
+                                height = 40.dp,
                                 onClick = {
                                     directEditPdfLauncher.launch(arrayOf("application/pdf"))
                                 },
@@ -452,14 +462,14 @@ fun LibraryScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     GlassActionButton(
                         text = "Scan",
                         icon = Icons.Default.CameraAlt,
                         isPrimary = true,
-                        height = 42.dp,
+                        height = 40.dp,
                         onClick = { onLaunchScanner(ScannerCaptureMode.STANDARD_BATCH) },
                         modifier = Modifier
                             .weight(1f)
@@ -469,7 +479,7 @@ fun LibraryScreen(
                         text = "Import",
                         icon = Icons.Default.PhotoLibrary,
                         isPrimary = false,
-                        height = 42.dp,
+                        height = 40.dp,
                         onClick = onPickGalleryImages,
                         modifier = Modifier
                             .weight(1f)
@@ -479,7 +489,7 @@ fun LibraryScreen(
                         text = "ID Card",
                         icon = Icons.Default.Badge,
                         isPrimary = false,
-                        height = 42.dp,
+                        height = 40.dp,
                         onClick = { onLaunchScanner(ScannerCaptureMode.ID_CARD) },
                         modifier = Modifier.weight(1f)
                     )
@@ -487,21 +497,21 @@ fun LibraryScreen(
                         text = "QR",
                         icon = Icons.Default.QrCodeScanner,
                         isPrimary = false,
-                        height = 42.dp,
+                        height = 40.dp,
                         onClick = { onLaunchScanner(ScannerCaptureMode.QR_BARCODE) },
                         modifier = Modifier.weight(0.85f)
                     )
                 }
 
-                // Full-Width Single-Line iOS Glass Search Bar
-                val searchBg = if (isDark) Color(0xFF1A2942).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.82f)
-                val searchBorder = if (isDark) Color.White.copy(alpha = 0.36f) else Color.White
+                // Minimalist shadcn/ui 1dp Zinc Search Input
+                val searchBg = if (isDark) Zinc900 else Color.White
+                val searchBorder = if (isDark) Zinc800 else Zinc200
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
                     placeholder = {
                         Text(
-                            text = "Search PDFs, OCR text & tags...",
+                            text = "Search documents, OCR text & tags...",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -511,7 +521,8 @@ fun LibraryScreen(
                         Icon(
                             Icons.Default.Search,
                             contentDescription = "Search",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
                         )
                     },
                     trailingIcon = {
@@ -526,7 +537,7 @@ fun LibraryScreen(
                         }
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = searchBg,
                         unfocusedContainerColor = searchBg,

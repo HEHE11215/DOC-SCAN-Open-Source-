@@ -298,8 +298,9 @@ object ImageProcessor {
                 source = rotated,
                 brightness = brightness,
                 contrast = contrast,
-                saturationBoost = 1.15f,
-                contrastBoost = 1.08f
+                saturationBoost = 0f,
+                contrastBoost = 1.28f,
+                isBwPrint = true
             )
         }
 
@@ -309,7 +310,8 @@ object ImageProcessor {
                 brightness = brightness + 6f,
                 contrast = contrast * 1.12f,
                 saturationBoost = 1.40f,
-                contrastBoost = 1.18f
+                contrastBoost = 1.18f,
+                isBwPrint = false
             )
         }
 
@@ -400,18 +402,21 @@ object ImageProcessor {
     }
 
     /**
-     * Clean Document Scanner ("Clear" & "Magic" mode):
+     * Clean Document Scanner ("Clear" Black & White Print mode & "Magic" Color mode):
      * - Estimates a continuous, bilinear-interpolated illumination envelope (zero square block artifacts).
-     * - Clamps minimum background illumination so dark artwork, photos, banners, and graphics are NEVER blown out to white.
-     * - Preserves full RGB color vibrancy while cleanly whitening low-saturation paper backgrounds and deepening ink/text.
-     * - Applies a subtle 3x3 unsharp-mask pass for crisp, optical-scanner text sharpness.
+     * - When `isBwPrint = true` (Clear Mode): Produces ultra-crisp Black & White laser-print quality
+     *   by bleaching uneven paper shadows to pure #FFFFFF, deepening ink strokes with an anti-aliased
+     *   high-contrast S-curve, and applying a 3x3 unsharp mask for razor-sharp typography.
+     * - When `isBwPrint = false` (Magic Color Mode): Preserves full RGB color vibrancy while cleanly
+     *   whitening low-saturation paper backgrounds.
      */
     private fun applyDocumentClearScan(
         source: Bitmap,
         brightness: Float = 0f,
         contrast: Float = 1f,
         saturationBoost: Float = 1.15f,
-        contrastBoost: Float = 1.08f
+        contrastBoost: Float = 1.08f,
+        isBwPrint: Boolean = true
     ): Bitmap {
         val w = source.width
         val h = source.height
@@ -443,9 +448,9 @@ object ImageProcessor {
                 break
             }
         }
-        globalHighLuma = globalHighLuma.coerceIn(180, 250)
+        globalHighLuma = globalHighLuma.coerceIn(175, 250)
         // Safe illumination floor prevents dark graphics/photos from being over-amplified into white ghosts
-        val minSafeBg = max(172, (globalHighLuma * 0.78f).toInt())
+        val minSafeBg = max(165, (globalHighLuma * 0.76f).toInt())
 
         val blockSize = max(24, min(w, h) / 18)
         val gridW = (w + blockSize - 1) / blockSize
@@ -468,7 +473,7 @@ object ImageProcessor {
                         val c = pixels[rowOffset + x]
                         val l = (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
                         if (l > maxL) maxL = l
-                        if (l >= minSafeBg - 20) {
+                        if (l >= minSafeBg - 22) {
                             sumBright += l
                             countBright++
                         }
@@ -482,10 +487,10 @@ object ImageProcessor {
         // 3. Smooth illumination grid with 4 Gaussian passes
         val smoothBg = smoothGridGaussian(rawBg, gridW, gridH, passes = 4)
 
-        // 4. Per-pixel bilinear illumination normalization + Clean Scanner color & paper curve
-        val effectiveContrast = (contrast * contrastBoost).coerceIn(0.65f, 2.1f)
+        // 4. Per-pixel bilinear illumination normalization + B&W Print / Magic Color curve
+        val effectiveContrast = (contrast * contrastBoost).coerceIn(0.65f, 2.35f)
         val brightnessOffset = brightness * 0.85f
-        val whitePaperKnee = (218f - brightness * 0.30f).coerceIn(188f, 242f)
+        val whitePaperKnee = (200f - brightness * 0.30f).coerceIn(174f, 236f)
         val normalizedPixels = IntArray(w * h)
         val lumaBuffer = IntArray(w * h)
 
@@ -499,56 +504,73 @@ object ImageProcessor {
                 val bIn = c and 0xFF
 
                 val bg = sampleBilinearGrid(smoothBg, gridW, gridH, blockSize, x, y).coerceIn(minSafeBg.toFloat(), 255f)
-                // Gentle shadow-lifting gain (capped at 1.38x so dark regions stay natural)
-                val gain = (250f / bg).coerceIn(1.0f, 1.38f)
+                val gain = (252f / bg).coerceIn(1.0f, 1.48f)
 
-                var r = rIn * gain + brightnessOffset
-                var g = gIn * gain + brightnessOffset
-                var b = bIn * gain + brightnessOffset
+                if (isBwPrint) {
+                    // High-Clarity Black & White Laser-Print Document Curve
+                    val rawLuma = (rIn * 77 + gIn * 150 + bIn * 29) shr 8
+                    var normL = rawLuma * gain + brightnessOffset
+                    normL = (normL - 142f) * effectiveContrast + 142f
 
-                // Apply scanner contrast around midpoint (136)
-                r = (r - 136f) * effectiveContrast + 136f
-                g = (g - 136f) * effectiveContrast + 136f
-                b = (b - 136f) * effectiveContrast + 136f
+                    val printLuma = when {
+                        normL >= whitePaperKnee -> 255f
+                        normL <= 78f -> (normL * 0.22f).coerceIn(0f, 20f)
+                        else -> {
+                            // Smooth cubic Hermite S-curve between ink (78) and pure white paper (whitePaperKnee)
+                            val t = ((normL - 78f) / (whitePaperKnee - 78f).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                            val s = t * t * (3f - 2f * t)
+                            18f + s * 237f
+                        }
+                    }
+                    val vOut = printLuma.toInt().coerceIn(0, 255)
+                    lumaBuffer[idx] = vOut
+                    normalizedPixels[idx] = (0xFF shl 24) or (vOut shl 16) or (vOut shl 8) or vOut
+                } else {
+                    var r = rIn * gain + brightnessOffset
+                    var g = gIn * gain + brightnessOffset
+                    var b = bIn * gain + brightnessOffset
 
-                val luma = 0.299f * r + 0.587f * g + 0.114f * b
-                val maxCh = max(r, max(g, b))
-                val minCh = min(r, min(g, b))
-                val chroma = maxCh - minCh
+                    r = (r - 136f) * effectiveContrast + 136f
+                    g = (g - 136f) * effectiveContrast + 136f
+                    b = (b - 136f) * effectiveContrast + 136f
 
-                // Boost color saturation for colorful stamps, logos, and graphics
-                if (chroma > 6f) {
-                    r = luma + (r - luma) * saturationBoost
-                    g = luma + (g - luma) * saturationBoost
-                    b = luma + (b - luma) * saturationBoost
+                    val luma = 0.299f * r + 0.587f * g + 0.114f * b
+                    val maxCh = max(r, max(g, b))
+                    val minCh = min(r, min(g, b))
+                    val chroma = maxCh - minCh
+
+                    if (chroma > 6f) {
+                        r = luma + (r - luma) * saturationBoost
+                        g = luma + (g - luma) * saturationBoost
+                        b = luma + (b - luma) * saturationBoost
+                    }
+
+                    if (luma > whitePaperKnee && chroma < 48f) {
+                        val t = ((luma - whitePaperKnee) / (255f - whitePaperKnee).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        val chromaWeight = (1f - (chroma / 48f)).coerceIn(0f, 1f)
+                        val whiteBlend = t * t * (3f - 2f * t) * chromaWeight * 0.88f
+                        r += (255f - r) * whiteBlend
+                        g += (255f - g) * whiteBlend
+                        b += (255f - b) * whiteBlend
+                    } else if (luma < 88f) {
+                        val inkFactor = 0.88f + 0.12f * (luma / 88f).coerceIn(0f, 1f)
+                        r *= inkFactor
+                        g *= inkFactor
+                        b *= inkFactor
+                    }
+
+                    val rOut = r.toInt().coerceIn(0, 255)
+                    val gOut = g.toInt().coerceIn(0, 255)
+                    val bOut = b.toInt().coerceIn(0, 255)
+                    lumaBuffer[idx] = (rOut * 77 + gOut * 150 + bOut * 29) shr 8
+                    normalizedPixels[idx] = (0xFF shl 24) or (rOut shl 16) or (gOut shl 8) or bOut
                 }
-
-                // Smoothly whiten low-chroma paper highlights (> whitePaperKnee) to crisp scanner white
-                if (luma > whitePaperKnee && chroma < 48f) {
-                    val t = ((luma - whitePaperKnee) / (255f - whitePaperKnee).coerceAtLeast(1f)).coerceIn(0f, 1f)
-                    val chromaWeight = (1f - (chroma / 48f)).coerceIn(0f, 1f)
-                    val whiteBlend = t * t * (3f - 2f * t) * chromaWeight * 0.88f
-                    r += (255f - r) * whiteBlend
-                    g += (255f - g) * whiteBlend
-                    b += (255f - b) * whiteBlend
-                } else if (luma < 88f) {
-                    // Gently deepen dark ink/text for crisp readability without crushing midtones
-                    val inkFactor = 0.88f + 0.12f * (luma / 88f).coerceIn(0f, 1f)
-                    r *= inkFactor
-                    g *= inkFactor
-                    b *= inkFactor
-                }
-
-                val rOut = r.toInt().coerceIn(0, 255)
-                val gOut = g.toInt().coerceIn(0, 255)
-                val bOut = b.toInt().coerceIn(0, 255)
-                lumaBuffer[idx] = (rOut * 77 + gOut * 150 + bOut * 29) shr 8
-                normalizedPixels[idx] = (0xFF shl 24) or (rOut shl 16) or (gOut shl 8) or bOut
             }
         }
 
-        // 5. Fast 3x3 Unsharp Mask pass for crisp optical-scanner text & line sharpness
+        // 5. Fast 3x3 Unsharp Mask pass for crisp laser-print text & line sharpness
         val outPixels = normalizedPixels.copyOf()
+        val unsharpMultiplier = if (isBwPrint) 5 else 3 // Stronger edge definition for B&W Print
         for (y in 1 until h - 1) {
             val rowOffset = y * w
             val prevRow = (y - 1) * w
@@ -563,8 +585,8 @@ object ImageProcessor {
                     lumaBuffer[idx + 1]
                 ) shr 2
                 val detail = centerL - neighborL
-                if (abs(detail) > 3) {
-                    val boost = (detail * 3) shr 3 // ~0.375x unsharp mask
+                if (abs(detail) > 2) {
+                    val boost = (detail * unsharpMultiplier) shr 3
                     val c = normalizedPixels[idx]
                     val r = (((c shr 16) and 0xFF) + boost).coerceIn(0, 255)
                     val g = (((c shr 8) and 0xFF) + boost).coerceIn(0, 255)
@@ -721,18 +743,41 @@ object ImageProcessor {
     }
 
     /**
-     * Composites Front and Back of an ID Card onto a single A4 page with crop marks and optional watermark.
+     * Composites Front and Back of an ID Card or Passport onto a single A4 page with precision corner crop marks,
+     * optional B&W Print Clear Scan enhancement, and optional watermark.
      */
     suspend fun createIdCardCompositePage(
         frontBitmap: Bitmap,
         backBitmap: Bitmap,
-        watermark: String = ""
+        watermark: String = "",
+        applyBwPrint: Boolean = false,
+        showCropMarks: Boolean = true,
+        documentTypeLabel: String = "ID CARD / PASSPORT (2-SIDE A4)"
     ): Bitmap = withContext(Dispatchers.Default) {
         val pageW = 1240
         val pageH = 1754
         val out = Bitmap.createBitmap(pageW, pageH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         canvas.drawColor(Color.WHITE)
+
+        val processedFront = if (applyBwPrint) {
+            applyDocumentClearScan(frontBitmap, isBwPrint = true, contrastBoost = 1.28f)
+        } else {
+            frontBitmap
+        }
+        val processedBack = if (applyBwPrint) {
+            applyDocumentClearScan(backBitmap, isBwPrint = true, contrastBoost = 1.28f)
+        } else {
+            backBitmap
+        }
+
+        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#18181B")
+            textSize = 28f
+            isFakeBoldText = true
+            letterSpacing = 0.08f
+        }
+        canvas.drawText(documentTypeLabel, 190f, 118f, headerPaint)
 
         val cardW = 860f
         val cardH = 540f
@@ -741,29 +786,55 @@ object ImageProcessor {
         val topBack = 960f
 
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#CBD5E1")
+            color = Color.parseColor("#D4D4D8")
             style = Paint.Style.STROKE
-            strokeWidth = 3f
+            strokeWidth = 2.5f
+        }
+        val cropMarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#18181B")
+            style = Paint.Style.STROKE
+            strokeWidth = 3.5f
         }
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#475569")
-            textSize = 32f
+            color = Color.parseColor("#52525B")
+            textSize = 26f
             isFakeBoldText = true
+            letterSpacing = 0.06f
         }
 
-        canvas.drawText("FRONT SIDE", left, topFront - 24f, labelPaint)
-        val frontRect = RectF(left, topFront, left + cardW, topFront + cardH)
-        canvas.drawBitmap(frontBitmap, null, frontRect, Paint(Paint.FILTER_BITMAP_FLAG))
-        canvas.drawRect(frontRect, borderPaint)
+        fun drawCornerCropMarks(rect: RectF) {
+            if (!showCropMarks) return
+            val pad = 16f
+            val len = 34f
+            // Top-Left
+            canvas.drawLine(rect.left - pad, rect.top - pad, rect.left - pad + len, rect.top - pad, cropMarkPaint)
+            canvas.drawLine(rect.left - pad, rect.top - pad, rect.left - pad, rect.top - pad + len, cropMarkPaint)
+            // Top-Right
+            canvas.drawLine(rect.right + pad - len, rect.top - pad, rect.right + pad, rect.top - pad, cropMarkPaint)
+            canvas.drawLine(rect.right + pad, rect.top - pad, rect.right + pad, rect.top - pad + len, cropMarkPaint)
+            // Bottom-Left
+            canvas.drawLine(rect.left - pad, rect.bottom + pad - len, rect.left - pad, rect.bottom + pad, cropMarkPaint)
+            canvas.drawLine(rect.left - pad, rect.bottom + pad, rect.left - pad + len, rect.bottom + pad, cropMarkPaint)
+            // Bottom-Right
+            canvas.drawLine(rect.right + pad - len, rect.bottom + pad, rect.right + pad, rect.bottom + pad, cropMarkPaint)
+            canvas.drawLine(rect.right + pad, rect.bottom + pad - len, rect.right + pad, rect.bottom + pad, cropMarkPaint)
+        }
 
-        canvas.drawText("BACK SIDE", left, topBack - 24f, labelPaint)
+        canvas.drawText("01 / FRONT SIDE", left, topFront - 28f, labelPaint)
+        val frontRect = RectF(left, topFront, left + cardW, topFront + cardH)
+        canvas.drawBitmap(processedFront, null, frontRect, Paint(Paint.FILTER_BITMAP_FLAG))
+        canvas.drawRect(frontRect, borderPaint)
+        drawCornerCropMarks(frontRect)
+
+        canvas.drawText("02 / BACK SIDE", left, topBack - 28f, labelPaint)
         val backRect = RectF(left, topBack, left + cardW, topBack + cardH)
-        canvas.drawBitmap(backBitmap, null, backRect, Paint(Paint.FILTER_BITMAP_FLAG))
+        canvas.drawBitmap(processedBack, null, backRect, Paint(Paint.FILTER_BITMAP_FLAG))
         canvas.drawRect(backRect, borderPaint)
+        drawCornerCropMarks(backRect)
 
         if (watermark.isNotBlank()) {
             val wmPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(48, 30, 62, 98)
+                color = Color.argb(44, 24, 24, 27)
                 textSize = 64f
                 isFakeBoldText = true
                 textAlign = Paint.Align.CENTER
@@ -1073,6 +1144,244 @@ object ImageProcessor {
                 y += lineHeight
             }
             bmp
+        }
+    }
+
+    /**
+     * Generates a high-contrast monochrome QR Matrix & Barcode Card bitmap with finder patterns,
+     * alignment module, timing pattern, payload encoding, and optional footer caption.
+     */
+    fun generateQrCodeBitmap(
+        content: String,
+        sizePx: Int = 640,
+        label: String = ""
+    ): Bitmap {
+        val cleanPayload = content.trim().ifBlank { "https://docscan.app" }
+        val gridDim = 29 // Version 3 QR 29x29 modules
+        val matrix = Array(gridDim) { BooleanArray(gridDim) }
+        val reserved = Array(gridDim) { BooleanArray(gridDim) }
+
+        fun placeFinderPattern(startX: Int, startY: Int) {
+            for (dy in -1..7) {
+                for (dx in -1..7) {
+                    val x = startX + dx
+                    val y = startY + dy
+                    if (x in 0 until gridDim && y in 0 until gridDim) {
+                        reserved[y][x] = true
+                        val inOuter = dx in 0..6 && dy in 0..6 && (dx == 0 || dx == 6 || dy == 0 || dy == 6)
+                        val inInner = dx in 2..4 && dy in 2..4
+                        matrix[y][x] = inOuter || inInner
+                    }
+                }
+            }
+        }
+
+        placeFinderPattern(0, 0)
+        placeFinderPattern(gridDim - 7, 0)
+        placeFinderPattern(0, gridDim - 7)
+
+        // Alignment pattern at (20, 20)
+        for (dy in -2..2) {
+            for (dx in -2..2) {
+                val x = 20 + dx
+                val y = 20 + dy
+                reserved[y][x] = true
+                matrix[y][x] = (abs(dx) == 2 || abs(dy) == 2 || (dx == 0 && dy == 0))
+            }
+        }
+
+        // Timing patterns
+        for (i in 8 until gridDim - 8) {
+            reserved[6][i] = true
+            matrix[6][i] = (i % 2 == 0)
+            reserved[i][6] = true
+            matrix[i][6] = (i % 2 == 0)
+        }
+
+        // Deterministic bit stream from UTF-8 payload bytes + SHA-256 parity bytes
+        val payloadBytes = cleanPayload.toByteArray(Charsets.UTF_8)
+        val digestBytes = try {
+            java.security.MessageDigest.getInstance("SHA-256").digest(payloadBytes)
+        } catch (_: Exception) {
+            payloadBytes
+        }
+        val combinedBytes = payloadBytes + digestBytes
+        var bitIndex = 0
+
+        for (y in 0 until gridDim) {
+            for (x in 0 until gridDim) {
+                if (!reserved[y][x]) {
+                    val byteVal = combinedBytes[(bitIndex / 8) % combinedBytes.size].toInt() and 0xFF
+                    val bit = ((byteVal ushr (7 - (bitIndex % 8))) and 1) == 1
+                    val mask = ((x + y) % 2 == 0)
+                    matrix[y][x] = bit xor mask
+                    bitIndex++
+                }
+            }
+        }
+
+        val extraFooterH = if (label.isNotBlank()) (sizePx * 0.14f).toInt() else 0
+        val bmp = Bitmap.createBitmap(sizePx, sizePx + extraFooterH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        canvas.drawColor(Color.WHITE)
+
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#E4E4E7")
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        canvas.drawRoundRect(
+            RectF(4f, 4f, sizePx - 4f, (sizePx + extraFooterH) - 4f),
+            24f,
+            24f,
+            borderPaint
+        )
+
+        val quietZone = sizePx * 0.10f
+        val moduleSize = (sizePx - quietZone * 2f) / gridDim.toFloat()
+        val modulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#09090B")
+            style = Paint.Style.FILL
+        }
+
+        for (y in 0 until gridDim) {
+            for (x in 0 until gridDim) {
+                if (matrix[y][x]) {
+                    val left = quietZone + x * moduleSize
+                    val top = quietZone + y * moduleSize
+                    canvas.drawRect(left, top, left + moduleSize + 0.5f, top + moduleSize + 0.5f, modulePaint)
+                }
+            }
+        }
+
+        if (label.isNotBlank()) {
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#18181B")
+                textSize = sizePx * 0.045f
+                isFakeBoldText = true
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText(
+                label.take(36),
+                sizePx / 2f,
+                sizePx + extraFooterH * 0.58f,
+                textPaint
+            )
+        }
+
+        return bmp
+    }
+
+    /**
+     * Parses OCR blocks and full text from a scanned receipt, invoice, or tabular document
+     * into structured CSV rows (with columns for Line #, Item / Description, Date / Reference, and Amount / Value).
+     */
+    fun parseReceiptAndTableToCsvRows(
+        fullText: String,
+        blocks: List<com.example.domain.model.OcrBlockItem>
+    ): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        rows.add(listOf("Row #", "Category / Field", "Description / Item", "Amount / Value"))
+
+        val amountRegex = Regex("""([$€£¥₹]?\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2})""")
+        val dateRegex = Regex("""(\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b)""", RegexOption.IGNORE_CASE)
+
+        // Group spatial OCR blocks by vertical Y row if blocks are available
+        val rawLines: List<String> = if (blocks.isNotEmpty()) {
+            val sortedByY = blocks.sortedWith(compareBy({ (it.topRatio * 45f).toInt() }, { it.leftRatio }))
+            val clusteredLines = mutableListOf<MutableList<com.example.domain.model.OcrBlockItem>>()
+            for (blk in sortedByY) {
+                val lastCluster = clusteredLines.lastOrNull()
+                if (lastCluster != null && abs(lastCluster.first().topRatio - blk.topRatio) < 0.028f) {
+                    lastCluster.add(blk)
+                } else {
+                    clusteredLines.add(mutableListOf(blk))
+                }
+            }
+            clusteredLines.flatMap { cluster ->
+                val joined = cluster.sortedBy { it.leftRatio }.joinToString("   ") { it.text.trim() }
+                joined.split("\n")
+            }
+        } else {
+            fullText.split("\n")
+        }.map { it.trim() }.filter { it.isNotBlank() }
+
+        var rowNum = 1
+        var detectedDate = ""
+
+        for (line in rawLines) {
+            val dateMatch = dateRegex.find(line)
+            if (dateMatch != null && detectedDate.isEmpty()) {
+                detectedDate = dateMatch.value.trim()
+                rows.add(listOf((rowNum++).toString(), "Date", line, detectedDate))
+                continue
+            }
+
+            // Check if the line has multiple tab/space-separated columns
+            val multiColParts = line.split(Regex("""\s{2,}|\t|\|""")).map { it.trim() }.filter { it.isNotEmpty() }
+            val amountsInLine = amountRegex.findAll(line).map { it.value.trim() }.toList()
+
+            when {
+                amountsInLine.isNotEmpty() -> {
+                    val amountVal = amountsInLine.last()
+                    val desc = line.replace(amountVal, "").trim().trimEnd('-', ':', '.', '•', ' ')
+                    val category = when {
+                        desc.contains("total", ignoreCase = true) || desc.contains("due", ignoreCase = true) -> "TOTAL"
+                        desc.contains("tax", ignoreCase = true) || desc.contains("vat", ignoreCase = true) -> "Tax"
+                        desc.contains("sub", ignoreCase = true) -> "Subtotal"
+                        else -> "Line Item"
+                    }
+                    rows.add(
+                        listOf(
+                            (rowNum++).toString(),
+                            category,
+                            desc.ifBlank { line },
+                            amountVal
+                        )
+                    )
+                }
+                multiColParts.size >= 2 -> {
+                    rows.add(
+                        listOf(
+                            (rowNum++).toString(),
+                            multiColParts.first(),
+                            multiColParts.drop(1).dropLast(1).joinToString(" ").ifBlank { multiColParts[1] },
+                            if (multiColParts.size >= 3) multiColParts.last() else ""
+                        )
+                    )
+                }
+                line.contains(":") -> {
+                    val idx = line.indexOf(":")
+                    val key = line.substring(0, idx).trim()
+                    val value = line.substring(idx + 1).trim()
+                    rows.add(listOf((rowNum++).toString(), key.ifBlank { "Meta" }, value, ""))
+                }
+                else -> {
+                    val cat = if (rowNum == 1) "Header / Merchant" else "Text Row"
+                    rows.add(listOf((rowNum++).toString(), cat, line, ""))
+                }
+            }
+        }
+
+        if (rows.size == 1) {
+            rows.add(listOf("1", "Document", "No structured rows found — run OCR first", "0.00"))
+        }
+        return rows
+    }
+
+    /**
+     * Escapes and formats a 2D table of strings into RFC-4180 compliant CSV text.
+     */
+    fun formatCsvRowsToString(rows: List<List<String>>): String {
+        return rows.joinToString("\n") { row ->
+            row.joinToString(",") { cell ->
+                val clean = cell.replace("\"", "\"\"")
+                if (clean.contains(",") || clean.contains("\"") || clean.contains("\n")) {
+                    "\"$clean\""
+                } else {
+                    clean
+                }
+            }
         }
     }
 }

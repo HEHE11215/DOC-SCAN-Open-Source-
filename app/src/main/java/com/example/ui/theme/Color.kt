@@ -2,36 +2,50 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// iOS 18 / visionOS Liquid Glass Palette
-val DeepNavy = Color(0xFF060B16)
-val SlateNavy = Color(0xFF111C2D)
-val ElectricTeal = Color(0xFF0A84FF)       // iOS System Blue (High contrast with White text)
-val LuminousCyan = Color(0xFF38BDF8)       // Crisp Sky Cyan
-val RoyalBlue = Color(0xFF0066FF)          // Vibrant Royal Blue
-val IndigoAccent = Color(0xFF6366F1)       // Vibrant Indigo
-val EmeraldSuccess = Color(0xFF30D158)     // iOS Green
-val AmberWarning = Color(0xFFFF9F0A)       // iOS Amber
-val CrimsonError = Color(0xFFFF453A)       // iOS Red
+// shadcn/ui Zinc Neutral Scale
+val Zinc50 = Color(0xFFFAFAFA)
+val Zinc100 = Color(0xFFF4F4F5)
+val Zinc200 = Color(0xFFE4E4E7)
+val Zinc300 = Color(0xFFD4D4D8)
+val Zinc400 = Color(0xFFA1A1AA)
+val Zinc500 = Color(0xFF71717A)
+val Zinc600 = Color(0xFF52525B)
+val Zinc700 = Color(0xFF3F3F46)
+val Zinc800 = Color(0xFF27272A)
+val Zinc900 = Color(0xFF18181B)
+val Zinc950 = Color(0xFF09090B)
 
-// 3D Glowing RGB Palette
-val RgbCyan = Color(0xFF00F5FF)
-val RgbBlue = Color(0xFF0066FF)
-val RgbViolet = Color(0xFF8B5CF6)
-val RgbMagenta = Color(0xFFFF007F)
-val RgbOrange = Color(0xFFFF8C00)
-val RgbEmerald = Color(0xFF00FF88)
+// Semantic Tokens mapped to Minimalist Monochrome Zinc shadcn/ui
+val DeepNavy = Zinc950
+val SlateNavy = Zinc900
+val ElectricTeal = Zinc900       // Primary ink in Light / mapped via ColorScheme in Dark
+val LuminousCyan = Zinc400       // Subtle monochrome highlight
+val RoyalBlue = Zinc900          // Primary Zinc-900 action surface
+val IndigoAccent = Zinc700       // Secondary monochrome accent
+val EmeraldSuccess = Color(0xFF10B981)
+val AmberWarning = Color(0xFFF59E0B)
+val CrimsonError = Color(0xFFEF4444)
 
-// Light Glass Mode Surfaces (Crisp dark ink on frosted ice)
-val LightBackground = Color(0xFFDFE9F6)
+// Legacy accent references mapped to refined monochrome Zinc tones
+val RgbCyan = Zinc300
+val RgbBlue = Zinc500
+val RgbViolet = Zinc400
+val RgbMagenta = Zinc600
+val RgbOrange = Zinc400
+val RgbEmerald = Zinc300
+
+// Light shadcn/ui Zinc Surfaces (--background: #FFFFFF, --muted: #F4F4F5, --border: #E4E4E7)
+val LightBackground = Color(0xFFFFFFFF)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFD5E2F2)
-val LightOnSurface = Color(0xFF0B1528)
-val LightOnSurfaceVariant = Color(0xFF334155)
+val LightSurfaceVariant = Zinc100
+val LightOnSurface = Zinc950
+val LightOnSurfaceVariant = Zinc500
+val LightBorder = Zinc200
 
-// Dark Glass Mode Surfaces (Pure bright white & luminous silver on deep obsidian glass)
-val DarkBackground = Color(0xFF050914)
-val DarkSurface = Color(0xFF111C30)
-val DarkSurfaceVariant = Color(0xFF1E2D4A)
-val DarkOnSurface = Color(0xFFFFFFFF)
-val DarkOnSurfaceVariant = Color(0xFFD8E4F8)
-
+// Dark shadcn/ui Zinc Surfaces (--background: #09090B, --muted: #18181B, --border: #27272A)
+val DarkBackground = Zinc950
+val DarkSurface = Color(0xFF0F0F12)
+val DarkSurfaceVariant = Zinc900
+val DarkOnSurface = Zinc50
+val DarkOnSurfaceVariant = Zinc400
+val DarkBorder = Zinc800

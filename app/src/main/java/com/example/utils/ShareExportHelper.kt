@@ -66,6 +66,33 @@ object ShareExportHelper {
         shareImageFile(context, file, "Share Picture to Status / Apps")
     }
 
+    fun shareBitmapAsPng(
+        context: Context,
+        bitmap: android.graphics.Bitmap,
+        fileNameWithoutExt: String = "DocScan_QR"
+    ) {
+        val clean = fileNameWithoutExt.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").ifBlank { "DocScan_QR" }
+        val outDir = File(context.cacheDir, "shared_images").apply { mkdirs() }
+        val file = File(outDir, "$clean.png")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+        }
+        shareImageFile(context, file, "Share QR / Image")
+    }
+
+    fun shareCsvContent(
+        context: Context,
+        csvContent: String,
+        fileNameWithoutExt: String = "Receipt_Table_Export"
+    ) {
+        val clean = fileNameWithoutExt.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").ifBlank { "Receipt_Table_Export" }
+        val file = File(context.cacheDir, "$clean.csv")
+        FileOutputStream(file).use { out ->
+            out.write(csvContent.toByteArray(Charsets.UTF_8))
+        }
+        shareFile(context, file, "text/csv", "Export CSV Spreadsheet")
+    }
+
     fun shareTextFile(context: Context, txtFile: File, title: String = "Share Text File") {
         shareFile(context, txtFile, "text/plain", title)
     }
