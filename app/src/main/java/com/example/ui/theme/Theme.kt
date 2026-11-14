@@ -1,11 +1,21 @@
 package com.example.ui.theme
 
 import android.app.Activity
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -35,22 +45,28 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,13 +86,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.example.domain.model.AppThemeMode
 import com.example.utils.LocalHaptics
 import com.example.utils.rememberHapticController
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 val LocalIsDarkGlass = compositionLocalOf { false }
@@ -883,3 +902,493 @@ fun LiquidGlassBottomBar(
         }
     }
 }
+
+/**
+ * Minimalist shadcn/ui Startup Motion Graphic with animated scanner reticle, sweeping laser scan beam,
+ * architectural Zinc grid, and "Developed by Ashir ❤️" credits.
+ */
+@Composable
+fun StartupMotionGraphicOverlay(
+    visible: Boolean,
+    onFinished: () -> Unit
+) {
+    val isDark = LocalIsDarkGlass.current
+    var stage by remember(visible) { mutableStateOf(0) }
+
+    LaunchedEffect(visible) {
+        if (visible) {
+            stage = 1
+            delay(220)
+            stage = 2
+            delay(1750)
+            onFinished()
+        } else {
+            stage = 0
+        }
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(220)),
+        exit = fadeOut(animationSpec = tween(360))
+    ) {
+        val infiniteTransition = rememberInfiniteTransition(label = "startupMotion")
+        val scanBeamProgress by infiniteTransition.animateFloat(
+            initialValue = 0.18f,
+            targetValue = 0.82f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 950, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "scanBeamY"
+        )
+        val reticlePulse by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1100, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "reticlePulse"
+        )
+        val heartScale by infiniteTransition.animateFloat(
+            initialValue = 0.92f,
+            targetValue = 1.18f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 550, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "heartPulse"
+        )
+
+        val logoScale by animateFloatAsState(
+            targetValue = if (stage >= 1) 1f else 0.72f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "logoScale"
+        )
+        val textAlpha by animateFloatAsState(
+            targetValue = if (stage >= 2) 1f else 0f,
+            animationSpec = tween(durationMillis = 380),
+            label = "textAlpha"
+        )
+
+        val bgColor = if (isDark) Zinc950 else Color.White
+        val gridLineColor = if (isDark) Zinc800.copy(alpha = 0.35f) else Zinc200.copy(alpha = 0.65f)
+        val cardFill = if (isDark) Zinc900 else Zinc900
+        val glyphColor = Zinc50
+        val borderColor = if (isDark) Zinc700 else Zinc300
+        val primaryText = if (isDark) Zinc50 else Zinc950
+        val secondaryText = if (isDark) Zinc400 else Zinc500
+        val pillBg = if (isDark) Zinc900 else Zinc100
+        val pillBorder = if (isDark) Zinc800 else Zinc200
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(bgColor)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onFinished
+                )
+                .drawBehind {
+                    // Subtle architectural shadcn/ui grid lines in background
+                    val step = 36.dp.toPx()
+                    var x = 0f
+                    while (x < size.width) {
+                        drawLine(
+                            color = gridLineColor,
+                            start = Offset(x, 0f),
+                            end = Offset(x, size.height),
+                            strokeWidth = 1f
+                        )
+                        x += step
+                    }
+                    var y = 0f
+                    while (y < size.height) {
+                        drawLine(
+                            color = gridLineColor,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 1f
+                        )
+                        y += step
+                    }
+                    // Radial vignette so center pops cleanly
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color.Transparent, bgColor.copy(alpha = 0.88f)),
+                            center = center,
+                            radius = size.minDimension * 0.72f
+                        )
+                    )
+                }
+                .padding(24.dp)
+                .testTag("startup_motion_overlay")
+        ) {
+            // Center Animated Geometric Scanner Emblem + Typography
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(108.dp)
+                        .graphicsLayer {
+                            scaleX = logoScale
+                            scaleY = logoScale
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Outer pulsing focus ring
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val ringInset = 4.dp.toPx() * (1f - reticlePulse * 0.5f)
+                        drawRoundRect(
+                            color = borderColor.copy(alpha = 0.45f + 0.35f * reticlePulse),
+                            topLeft = Offset(ringInset, ringInset),
+                            size = Size(size.width - ringInset * 2f, size.height - ringInset * 2f),
+                            cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx()),
+                            style = Stroke(width = 1.5.dp.toPx())
+                        )
+                    }
+
+                    // Core Monochrome shadcn/ui Scanner Emblem with animated laser beam
+                    Surface(
+                        modifier = Modifier.size(88.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = cardFill,
+                        border = BorderStroke(1.5.dp, borderColor)
+                    ) {
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        ) {
+                            val w = this.size.width
+                            val h = this.size.height
+                            val strokeW = (w * 0.085f).coerceAtLeast(2.5f)
+                            val stroke = Stroke(
+                                width = strokeW,
+                                cap = StrokeCap.Square,
+                                join = StrokeJoin.Miter
+                            )
+                            val cornerLen = w * (0.22f + 0.05f * reticlePulse)
+
+                            // 4 animated corner reticles
+                            drawLine(glyphColor, Offset(0f, cornerLen), Offset(0f, 0f), strokeWidth = strokeW)
+                            drawLine(glyphColor, Offset(0f, 0f), Offset(cornerLen, 0f), strokeWidth = strokeW)
+
+                            drawLine(glyphColor, Offset(w - cornerLen, 0f), Offset(w, 0f), strokeWidth = strokeW)
+                            drawLine(glyphColor, Offset(w, 0f), Offset(w, cornerLen), strokeWidth = strokeW)
+
+                            drawLine(glyphColor, Offset(0f, h - cornerLen), Offset(0f, h), strokeWidth = strokeW)
+                            drawLine(glyphColor, Offset(0f, h), Offset(cornerLen, h), strokeWidth = strokeW)
+
+                            drawLine(glyphColor, Offset(w - cornerLen, h), Offset(w, h), strokeWidth = strokeW)
+                            drawLine(glyphColor, Offset(w, h - cornerLen), Offset(w, h), strokeWidth = strokeW)
+
+                            // Inner folded document silhouette
+                            val docLeft = w * 0.22f
+                            val docTop = h * 0.18f
+                            val docRight = w * 0.78f
+                            val docBottom = h * 0.82f
+                            val fold = w * 0.16f
+
+                            val docPath = Path().apply {
+                                moveTo(docLeft, docTop)
+                                lineTo(docRight - fold, docTop)
+                                lineTo(docRight, docTop + fold)
+                                lineTo(docRight, docBottom)
+                                lineTo(docLeft, docBottom)
+                                close()
+                            }
+                            drawPath(path = docPath, color = glyphColor.copy(alpha = 0.9f), style = stroke)
+
+                            // Sweeping scan beam glow + crisp laser line
+                            val beamY = h * scanBeamProgress
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        glyphColor.copy(alpha = 0.28f),
+                                        Color.Transparent
+                                    ),
+                                    startY = (beamY - h * 0.14f).coerceAtLeast(0f),
+                                    endY = (beamY + h * 0.14f).coerceAtMost(h)
+                                ),
+                                topLeft = Offset(w * 0.10f, (beamY - h * 0.14f).coerceAtLeast(0f)),
+                                size = Size(w * 0.80f, h * 0.28f)
+                            )
+                            drawLine(
+                                color = glyphColor,
+                                start = Offset(w * 0.08f, beamY),
+                                end = Offset(w * 0.92f, beamY),
+                                strokeWidth = strokeW * 1.15f,
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Column(
+                    modifier = Modifier.graphicsLayer { alpha = textAlpha },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Doc Scan",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = primaryText,
+                        letterSpacing = (-0.5).sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = pillBg,
+                        border = BorderStroke(1.dp, pillBorder)
+                    ) {
+                        Text(
+                            text = "SHADCN/UI PDF & SCANNER STUDIO",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = secondaryText,
+                            letterSpacing = 0.8.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // Bottom Motion Graphic Credits Pill: "Developed by Ashir ❤️"
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 20.dp)
+                    .graphicsLayer { alpha = textAlpha },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = pillBg,
+                    border = BorderStroke(1.dp, pillBorder),
+                    modifier = Modifier.testTag("startup_credits_ashir_badge")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Developed by ",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = secondaryText
+                        )
+                        Text(
+                            text = "Ashir",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = primaryText
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "❤️",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = heartScale
+                                scaleY = heartScale
+                            }
+                        )
+                    }
+                }
+                Text(
+                    text = "Tap anywhere to continue",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = secondaryText.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Reusable Minimalist shadcn/ui Credits Pill ("Developed by Ashir ❤️") with pulsing heart.
+ */
+@Composable
+fun AshirCreditsBadge(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
+    val isDark = LocalIsDarkGlass.current
+    val haptics = LocalHaptics.current
+    val infiniteTransition = rememberInfiniteTransition(label = "ashirBadgePulse")
+    val heartScale by infiniteTransition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "badgeHeartScale"
+    )
+
+    val bg = if (isDark) Zinc900 else Zinc100
+    val border = if (isDark) Zinc800 else Zinc200
+    val primaryText = if (isDark) Zinc50 else Zinc950
+    val secondaryText = if (isDark) Zinc400 else Zinc500
+
+    Surface(
+        onClick = {
+            haptics.click()
+            onClick?.invoke()
+        },
+        enabled = onClick != null,
+        shape = RoundedCornerShape(8.dp),
+        color = bg,
+        border = BorderStroke(1.dp, border),
+        modifier = modifier.testTag("ashir_credits_badge")
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Developed by ",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = secondaryText
+            )
+            Text(
+                text = "Ashir",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = primaryText
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "❤️",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = heartScale
+                    scaleY = heartScale
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Full Credits & Creator Modal Dialog with option to replay the Startup Motion Graphic.
+ */
+@Composable
+fun AshirCreditsDialog(
+    onDismiss: () -> Unit,
+    onReplayStartupMotion: () -> Unit
+) {
+    val isDark = LocalIsDarkGlass.current
+    val pillBg = if (isDark) Zinc900 else Zinc100
+    val pillBorder = if (isDark) Zinc800 else Zinc200
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ShadcnBrandLogo(size = 32.dp)
+                Column {
+                    Text(
+                        text = "Doc Scan Credits",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = "Developed by Ashir ❤️",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = pillBg,
+                    border = BorderStroke(1.dp, pillBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Lead Developer & Architect",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Ashir ❤️",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Crafted with precision monochrome shadcn/ui design, high-contrast Clear B&W print processing, and instant Direct PDF Editing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = pillBorder)
+
+                Text(
+                    text = "Core Studio Stack",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "• Adaptive Light & Dark Zinc shadcn/ui Theme\n" +
+                        "• Print-Grade Clear B&W Document Scanner\n" +
+                        "• Direct PDF Text, Signature & Stamp Editor\n" +
+                        "• ID Card & Passport 2-Side A4 Combiner\n" +
+                        "• QR & Barcode Scanner + Matrix Generator\n" +
+                        "• Batch Watermark & Page Numbering Engine\n" +
+                        "• Smart Receipt & Table to CSV Extractor",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                GlassActionButton(
+                    text = "Replay Startup Motion Graphic",
+                    isPrimary = true,
+                    onClick = {
+                        onDismiss()
+                        onReplayStartupMotion()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("replay_startup_motion_dialog_button")
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+

@@ -58,6 +58,8 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import com.example.ui.theme.AshirCreditsBadge
+import com.example.ui.theme.AshirCreditsDialog
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.FrostedGlassCard
 import com.example.ui.theme.GlassActionButton
@@ -65,6 +67,7 @@ import com.example.ui.theme.GlassScreenBackground
 import com.example.ui.theme.GlassThemeTogglePill
 import com.example.ui.theme.LocalIsDarkGlass
 import com.example.ui.theme.RoyalBlue
+import com.example.ui.theme.ShadcnBrandLogo
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -211,7 +214,8 @@ fun signOutUser(
 fun AuthScreen(
     onContinueAsGuest: () -> Unit,
     onAuthSuccess: () -> Unit,
-    onToggleTheme: () -> Unit = {}
+    onToggleTheme: () -> Unit = {},
+    onReplayStartupMotion: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -219,6 +223,7 @@ fun AuthScreen(
     val credentialManager = remember(context) { CredentialManager.create(context) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showCreditsDialog by remember { mutableStateOf(false) }
 
     GlassScreenBackground(
         modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
@@ -253,41 +258,8 @@ fun AuthScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // iOS Glass Emblem
-                    FrostedGlassCard(
-                        cornerRadius = 24.dp,
-                        modifier = Modifier.size(80.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Canvas(modifier = Modifier.size(44.dp)) {
-                                val w = size.width
-                                val h = size.height
-                                drawRoundRect(
-                                    color = RoyalBlue.copy(alpha = 0.16f),
-                                    topLeft = Offset(w * 0.12f, h * 0.08f),
-                                    size = Size(w * 0.76f, h * 0.84f),
-                                    cornerRadius = CornerRadius(12f, 12f)
-                                )
-                                drawRoundRect(
-                                    color = RoyalBlue,
-                                    topLeft = Offset(w * 0.12f, h * 0.08f),
-                                    size = Size(w * 0.76f, h * 0.84f),
-                                    cornerRadius = CornerRadius(12f, 12f),
-                                    style = Stroke(width = 4.5f)
-                                )
-                                drawLine(
-                                    color = ElectricTeal,
-                                    start = Offset(0f, h * 0.50f),
-                                    end = Offset(w, h * 0.50f),
-                                    strokeWidth = 6f,
-                                    cap = StrokeCap.Round
-                                )
-                            }
-                        }
-                    }
+                    // Minimalist Geometric Brand Mark
+                    ShadcnBrandLogo(size = 64.dp)
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -435,9 +407,22 @@ fun AuthScreen(
                                 .testTag("google_sign_in_button")
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    AshirCreditsBadge(
+                        onClick = { showCreditsDialog = true }
+                    )
                 }
             }
         }
+    }
+
+    if (showCreditsDialog) {
+        AshirCreditsDialog(
+            onDismiss = { showCreditsDialog = false },
+            onReplayStartupMotion = onReplayStartupMotion
+        )
     }
 }
 

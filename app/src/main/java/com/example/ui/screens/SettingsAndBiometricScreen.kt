@@ -22,13 +22,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -64,11 +67,14 @@ import com.example.domain.model.PdfPageSize
 import com.example.domain.model.PdfQuality
 import com.example.ui.auth.authStateFlow
 import com.example.ui.auth.launchSignInWithGoogleSheet
+import com.example.ui.theme.AshirCreditsBadge
+import com.example.ui.theme.AshirCreditsDialog
 import com.example.ui.theme.FrostedGlassCard
 import com.example.ui.theme.GlassActionButton
 import com.example.ui.theme.GlassScreenBackground
 import com.example.ui.theme.GlassThemeTogglePill
 import com.example.ui.theme.LocalIsDarkGlass
+import com.example.ui.theme.ShadcnBrandLogo
 import com.example.ui.viewmodel.DocuScanViewModel
 import com.google.firebase.auth.FirebaseAuth
 
@@ -77,7 +83,8 @@ import com.google.firebase.auth.FirebaseAuth
 fun SettingsScreen(
     viewModel: DocuScanViewModel,
     onSignOut: () -> Unit,
-    onSwitchToWelcomeScreen: () -> Unit = {}
+    onSwitchToWelcomeScreen: () -> Unit = {},
+    onReplayStartupMotion: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -96,6 +103,7 @@ fun SettingsScreen(
         authInstance?.authStateFlow() ?: kotlinx.coroutines.flow.flowOf(null)
     }.collectAsStateWithLifecycle(initialValue = authInstance?.currentUser)
     var showPinDialog by remember { mutableStateOf(false) }
+    var showCreditsDialog by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
 
     GlassScreenBackground {
@@ -118,12 +126,18 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Settings",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ShadcnBrandLogo(size = 28.dp)
+                        Text(
+                            text = "Settings",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
                     GlassThemeTogglePill(
                         isDark = isDark,
                         onToggle = {
@@ -394,10 +408,78 @@ fun SettingsScreen(
                         }
                     }
 
+                    // Credits & Developer Card ("Developed by Ashir ❤️")
+                    SettingsCard(
+                        title = "Credits & Developer",
+                        icon = Icons.Default.Favorite
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Developed by Ashir ❤️",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Lead Architect, UI Designer & Creator",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                AshirCreditsBadge(
+                                    onClick = { showCreditsDialog = true }
+                                )
+                            }
+
+                            Text(
+                                text = "Designed with a minimalist Zinc shadcn/ui system, crisp Clear B&W print engine, Direct PDF Editor, and smart OCR workflows.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                GlassActionButton(
+                                    text = "Replay Startup Intro",
+                                    icon = Icons.Default.PlayArrow,
+                                    isPrimary = true,
+                                    onClick = onReplayStartupMotion,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("settings_replay_startup_button")
+                                )
+                                GlassActionButton(
+                                    text = "Full Credits",
+                                    icon = Icons.Default.Code,
+                                    isPrimary = false,
+                                    onClick = { showCreditsDialog = true },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("settings_full_credits_button")
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(108.dp))
                 }
             }
         }
+    }
+
+    if (showCreditsDialog) {
+        AshirCreditsDialog(
+            onDismiss = { showCreditsDialog = false },
+            onReplayStartupMotion = onReplayStartupMotion
+        )
     }
 
     if (showPinDialog) {

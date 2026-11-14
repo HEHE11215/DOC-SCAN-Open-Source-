@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -77,6 +78,7 @@ import com.example.ui.theme.GlassScreenBackground
 import com.example.ui.theme.LiquidGlassBottomBar
 import com.example.ui.theme.LiquidGlassNavTab
 import com.example.ui.theme.LocalIsDarkGlass
+import com.example.ui.theme.StartupMotionGraphicOverlay
 import com.example.ui.viewmodel.DocuScanViewModel
 import com.example.ui.viewmodel.ScannerCaptureMode
 import com.example.utils.LocalHaptics
@@ -168,51 +170,63 @@ class MainActivity : FragmentActivity() {
 
             DocuScanTheme(themeMode = rootSettings.themeMode) {
                 val isDark = LocalIsDarkGlass.current
-                if (currentUser == null && !rootSettings.isGuestMode) {
-                    AuthScreen(
-                        onContinueAsGuest = {
-                            scope.launch {
-                                appContainer.settingsRepository.setGuestMode(true)
-                            }
-                        },
-                        onAuthSuccess = {
-                            scope.launch {
-                                appContainer.settingsRepository.setGuestMode(false)
-                            }
-                        },
-                        onToggleTheme = {
-                            scope.launch {
-                                appContainer.settingsRepository.setThemeMode(
-                                    if (isDark) AppThemeMode.LIGHT else AppThemeMode.DARK
-                                )
-                            }
-                        }
-                    )
-                } else {
-                    val activeUserId = currentUser?.uid ?: "guest"
-                    val viewModel: DocuScanViewModel = viewModel(
-                        key = "docuscan_vm_$activeUserId",
-                        factory = DocuScanViewModel.provideFactory(
-                            appContainer = appContainer,
-                            appContext = applicationContext,
-                            currentUserId = activeUserId
-                        )
-                    )
-                    val settings by viewModel.settings.collectAsStateWithLifecycle()
-                    val isAppUnlocked by viewModel.isAppUnlocked.collectAsStateWithLifecycle()
+                var showStartupMotion by rememberSaveable { mutableStateOf(true) }
 
-                    if (settings.biometricLockEnabled && !isAppUnlocked) {
-                        AppLockGateScreen(
-                            expectedPin = settings.appLockPin,
-                            onUnlocked = { viewModel.markAppUnlocked() }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (currentUser == null && !rootSettings.isGuestMode) {
+                        AuthScreen(
+                            onContinueAsGuest = {
+                                scope.launch {
+                                    appContainer.settingsRepository.setGuestMode(true)
+                                }
+                            },
+                            onAuthSuccess = {
+                                scope.launch {
+                                    appContainer.settingsRepository.setGuestMode(false)
+                                }
+                            },
+                            onToggleTheme = {
+                                scope.launch {
+                                    appContainer.settingsRepository.setThemeMode(
+                                        if (isDark) AppThemeMode.LIGHT else AppThemeMode.DARK
+                                    )
+                                }
+                            },
+                            onReplayStartupMotion = { showStartupMotion = true }
                         )
                     } else {
-                        DocuScanMainShell(
-                            viewModel = viewModel,
-                            incomingShareIntent = incomingIntent,
-                            onConsumeIncomingIntent = { pendingIncomingIntent.value = null }
+                        val activeUserId = currentUser?.uid ?: "guest"
+                        val viewModel: DocuScanViewModel = viewModel(
+                            key = "docuscan_vm_$activeUserId",
+                            factory = DocuScanViewModel.provideFactory(
+                                appContainer = appContainer,
+                                appContext = applicationContext,
+                                currentUserId = activeUserId
+                            )
                         )
+                        val settings by viewModel.settings.collectAsStateWithLifecycle()
+                        val isAppUnlocked by viewModel.isAppUnlocked.collectAsStateWithLifecycle()
+
+                        if (settings.biometricLockEnabled && !isAppUnlocked) {
+                            AppLockGateScreen(
+                                expectedPin = settings.appLockPin,
+                                onUnlocked = { viewModel.markAppUnlocked() }
+                            )
+                        } else {
+                            DocuScanMainShell(
+                                viewModel = viewModel,
+                                incomingShareIntent = incomingIntent,
+                                onConsumeIncomingIntent = { pendingIncomingIntent.value = null },
+                                onReplayStartupMotion = { showStartupMotion = true }
+                            )
+                        }
                     }
+
+                    // Startup Motion Graphic Overlay featuring "Developed by Ashir ❤️"
+                    StartupMotionGraphicOverlay(
+                        visible = showStartupMotion,
+                        onFinished = { showStartupMotion = false }
+                    )
                 }
             }
         }
@@ -251,7 +265,8 @@ private fun extractMultipleUrisFromIntent(intent: Intent): List<Uri> {
 fun DocuScanMainShell(
     viewModel: DocuScanViewModel,
     incomingShareIntent: Intent? = null,
-    onConsumeIncomingIntent: () -> Unit = {}
+    onConsumeIncomingIntent: () -> Unit = {},
+    onReplayStartupMotion: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -491,7 +506,8 @@ fun DocuScanMainShell(
                                 },
                                 onSwitchToWelcomeScreen = {
                                     viewModel.setGuestMode(false)
-                                }
+                                },
+                                onReplayStartupMotion = onReplayStartupMotion
                             )
                         }
                     }
@@ -561,7 +577,8 @@ fun DocuScanMainShell(
                         },
                         onSwitchToWelcomeScreen = {
                             viewModel.setGuestMode(false)
-                        }
+                        },
+                        onReplayStartupMotion = onReplayStartupMotion
                     )
                 }
 
